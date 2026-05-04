@@ -1,0 +1,22 @@
+languageCode = "zh-cn"
+languageName = "简体中文"
+weight = 1
+title = "Chewy_iD's Blog"
+
+[params]
+  displayName = "简体中文"
+  isoCode = "zh-cn"
+  rtl = false
+  dateFormat = "2006-01-02"
+  logo = "img/blowfish_logo_transparent.png"
+
+[params.author]
+  name = "Chewy_iD"
+  image = "img/blowfish_logo.png"
+  headline = "Code. Explore. Share."
+  bio = "Stay curious, stay running."
+  links = [
+    { github = "https://github.com/newbie-ID" },
+    { email = "mailto:xzh02@foxmail.com" },
+    { link = "/pages/about/" },
+  ]
