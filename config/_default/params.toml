@@ -5,6 +5,8 @@ autoSwitchAppearance = true
 enableSearch = true
 enableCodeCopy = true
 
+mainSections = ["posts"]
+
 replyByEmail = false
 
 disableImageOptimization = false
