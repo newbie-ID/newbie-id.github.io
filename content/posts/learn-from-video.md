@@ -127,6 +127,18 @@ summary: "learn-from-video-skill 是一个 Agent Skill：丢给它一个视频�
 
 整个 Skill 的处理流程时间主要开销在 whisper 转录。有 N 卡，在 CUDA 的加持下，一部 80 分钟的课程，不到 9 分钟就变成全文稿；而如果官方字幕命中，转录成本直接为零。若是 CPU 模式，速度会慢很多， 可调用音频转文字 API 实现快速转录。
 
+## 实测成品 Demo
+
+三个真实视频，每个产出三种成品（**学霸笔记** · **PPT 演示** · **概念图**），全部由 learn-from-video-skill 一键生成，点击即可在线查看。
+
+| 视频源 | 语言 | 学霸笔记 | PPT 演示 | 概念图 |
+|---|:---:|---|---|---|
+| **BERT 论文精读**<br>BV1PL411M7eQ · ~38 min | 中文 | [📖 笔记](/posts/learn-from-video/demos/bert/note.html) | [🎞️ 演示](/posts/learn-from-video/demos/bert/slides.html) | [🕸️ 概念图](/posts/learn-from-video/demos/bert/diagram.html) |
+| **LLM 架构与超参数综述**<br>Stanford · lVynu4bo1rY · ~89 min | 英文 | [📖 笔记](/posts/learn-from-video/demos/llm-architecture/note.html) | [🎞️ 演示](/posts/learn-from-video/demos/llm-architecture/slides.html) | [🕸️ 概念图](/posts/learn-from-video/demos/llm-architecture/diagram.html) |
+| **CS224N L1 · Word2Vec**<br>Stanford · BV1Nh8BzrEED_p1 | 英文 | [📖 笔记](/posts/learn-from-video/demos/word2vec/note.html) | [🎞️ 演示](/posts/learn-from-video/demos/word2vec/slides.html) | [🕸️ 概念图](/posts/learn-from-video/demos/word2vec/diagram.html) |
+
+> 中英文视频都能处理：**官方字幕命中时直接采用**（零转录成本），笔记 / 演示 / 概念图会跟随原片语言输出；无字幕时由 whisper.cpp 自动检测语言转录。
+
 ## 技术栈与致谢
 
 - **whisper.cpp** — 本地转录，单二进制、跨平台，CPU / cublas GPU 自动选择

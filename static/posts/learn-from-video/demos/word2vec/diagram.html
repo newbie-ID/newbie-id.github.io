@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Word2Vec 原理演示 · CS224N Lecture 1</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root{
+  --bg0:#070710;
+  --bg1:#0f1024;
+  --blue:#4a9eff;
+  --green:#34d399;
+  --orange:#ff8a3d;
+  --purple:#a78bfa;
+  --yellow:#feca57;
+  --red:#ef4d5e;
+  --cyan:#22d3ee;
+  --ink:#e8eaf2;
+  --muted:#8a8fa8;
+  --line:rgba(255,255,255,.10);
+  --card:rgba(255,255,255,.035);
+}
+
+html,body{ height:100%; }
+body{
+  font-family: 'Inter','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  color:var(--ink);
+  background:
+    radial-gradient(1200px 700px at 12% -5%, rgba(74,158,255,.18), transparent 55%),
+    radial-gradient(1000px 600px at 95% 8%, rgba(167,139,250,.16), transparent 55%),
+    radial-gradient(900px 600px at 50% 110%, rgba(52,211,153,.12), transparent 55%),
+    linear-gradient(180deg,var(--bg0),var(--bg1));
+  min-height:100vh;
+  overflow-x:hidden;
+  position:relative;
+}
+
+/* 噪点 */
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:1; opacity:.12; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* 网格 */
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:1; opacity:.25;
+  background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse at center, #000 35%, transparent 78%);
+}
+
+#bgCanvas{ position:fixed; inset:0; z-index:2; pointer-events:none; }
+
+.stage{ position:relative; z-index:5; max-width:1480px; margin:0 auto; padding:34px 28px 60px; }
+
+/* ============ HEADER ============ */
+.hero{ text-align:center; margin-bottom:26px; }
+.hero .kicker{
+  display:inline-flex; gap:8px; align-items:center;
+  font-size:12px; letter-spacing:3px; text-transform:uppercase; color:var(--cyan);
+  padding:6px 14px; border:1px solid rgba(34,211,238,.35); border-radius:999px;
+  background:rgba(34,211,238,.06);
+  opacity:0; animation:fadeUp .7s ease .1s forwards;
+}
+.hero .kicker .dot{ width:6px; height:6px; border-radius:50%; background:var(--cyan); box-shadow:0 0 10px var(--cyan); animation:blink 1.6s infinite; }
+.hero h1{
+  font-size: clamp(30px, 4.2vw, 54px); font-weight:900; margin:14px 0 6px; letter-spacing:-.5px;
+  background:linear-gradient(92deg,#fff,#bcd3ff 40%,#c4a9ff 70%,#fff);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  opacity:0; animation:fadeUp .9s ease .25s forwards;
+}
+.hero h1 .en{ font-family:'Inter',sans-serif; font-weight:800; color:var(--green); -webkit-text-fill-color:var(--green); }
+.hero .sub{
+  font-size:15px; color:var(--muted); max-width:780px; margin:6px auto 0; line-height:1.7;
+  opacity:0; animation:fadeUp .9s ease .45s forwards;
+}
+.hero .sub b{ color:#cdd3e6; font-weight:600; }
+.hero .sub .q{ color:var(--yellow); font-style:italic; }
+
+/* ============ PIPELINE ============ */
+.pipeline{
+  display:grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap:6px;
+  align-items:stretch;
+  position:relative;
+  margin-top:18px;
+  opacity:0; animation:fadeUp .9s ease .7s forwards;
+}
+
+.node{
+  position:relative;
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:16px;
+  padding:16px 14px 14px;
+  backdrop-filter: blur(8px);
+  transition: transform .35s ease, box-shadow .35s ease, border-color .35s ease;
+  overflow:hidden;
+  display:flex; flex-direction:column;
+  min-height:230px;
+}
+.node::before{
+  content:""; position:absolute; inset:0; border-radius:16px; padding:1px;
+  background:linear-gradient(160deg, var(--accent,#4a9eff)55%, transparent 60%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude;
+  opacity:.6; transition:opacity .35s;
+}
+.node:hover{ transform:translateY(-6px); box-shadow:0 18px 50px rgba(0,0,0,.45); }
+.node:hover::before{ opacity:1; }
+
+.node .step{
+  position:absolute; top:10px; right:12px;
+  font-size:38px; font-weight:900; line-height:1; color:rgba(255,255,255,.05);
+  font-family:'Inter'; letter-spacing:-2px;
+}
+.node .tag{
+  font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted);
+  display:flex; align-items:center; gap:6px; margin-bottom:8px;
+}
+.node .tag .ico{ width:14px; height:14px; color:var(--accent,#4a9eff); }
+.node h3{
+  font-size:15.5px; font-weight:800; margin-bottom:6px; color:#fff;
+  display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+}
+.node h3 .en{ font-size:11px; font-weight:700; color:var(--accent,#4a9eff);
+  background:rgba(255,255,255,.05); padding:2px 7px; border-radius:5px; letter-spacing:.5px; }
+.node p{ font-size:11.5px; line-height:1.6; color:#b9bdce; }
+
+/* node color themes */
+.node.n1{ --accent:var(--blue); }
+.node.n2{ --accent:var(--cyan); }
+.node.n3{ --accent:var(--green); }
+.node.n4{ --accent:var(--yellow); }
+.node.n5{ --accent:var(--orange); }
+.node.n6{ --accent:var(--purple); }
+
+/* reveal sequential */
+.node{ opacity:0; transform:translateY(18px); animation:nodeIn .7s cubic-bezier(.2,.7,.3,1) forwards; }
+.node.n1{ animation-delay: .85s; }
+.node.n2{ animation-delay:1.05s; }
+.node.n3{ animation-delay:1.25s; }
+.node.n4{ animation-delay:1.45s; }
+.node.n5{ animation-delay:1.65s; }
+.node.n6{ animation-delay:1.85s; }
+
+/* arrows between nodes (overlay) */
+.arrows{
+  position:absolute; inset:0; pointer-events:none; z-index:3;
+}
+.arrows svg{ position:absolute; top:0; left:0; width:100%; height:100%; overflow:visible; }
+
+/* ============ node-internal visualizations ============ */
+/* n1 corpus text */
+.corpus{ font-family:'JetBrains Mono','Consolas',monospace; font-size:11px; line-height:1.85;
+  background:rgba(0,0,0,.30); border:1px solid rgba(255,255,255,.06); border-radius:8px;
+  padding:8px 10px; color:#9aa0b8; margin-top:8px; }
+.corpus .hl{ color:var(--green); font-weight:700; background:rgba(52,211,153,.12); padding:1px 3px; border-radius:3px; }
+.corpus .cursor{ display:inline-block; width:7px; height:11px; background:var(--cyan); vertical-align:-1px;
+  animation:cursorBlink 1s steps(2) infinite; box-shadow:0 0 8px var(--cyan); }
+
+/* n2 context window */
+.window-wrap{ margin-top:9px; display:flex; flex-direction:column; gap:5px; }
+.tokens{ display:flex; gap:3px; flex-wrap:wrap; justify-content:center; }
+.tok{ font-size:10px; padding:3px 6px; border-radius:5px; font-family:'JetBrains Mono',monospace;
+  background:rgba(255,255,255,.05); color:#aab0c8; border:1px solid rgba(255,255,255,.06); transition:.3s; }
+.tok.ctx{ color:var(--cyan); border-color:rgba(34,211,238,.35); background:rgba(34,211,238,.08); }
+.tok.center{ color:#06231b; background:var(--green); border-color:var(--green); font-weight:800;
+  box-shadow:0 0 14px rgba(52,211,153,.55); }
+.win-label{ font-size:10px; color:var(--muted); text-align:center; }
+.win-label b{ color:var(--green); }
+
+/* n3 dense vector */
+.vec-block{ margin-top:9px; display:flex; flex-direction:column; gap:6px; }
+.vecrow{ display:flex; align-items:center; gap:6px; }
+.vecrow .w{ width:54px; font-size:10.5px; font-weight:700; color:#cfd4e6; font-family:'JetBrains Mono',monospace; }
+.vecbar{ flex:1; display:flex; gap:2px; height:12px; }
+.cell{ flex:1; border-radius:2px; opacity:.85; transition:.4s; }
+.vecrow .val{ font-size:9px; color:var(--muted); width:24px; text-align:right; font-family:'JetBrains Mono',monospace; }
+
+/* n4 softmax formula */
+.formula{
+  margin-top:9px; font-family:'Cambria Math','Times New Roman',serif; font-size:13px; text-align:center;
+  color:#fff; line-height:1.9; padding:6px 4px;
+}
+.formula .frac{ display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; }
+.formula .frac .num{ border-bottom:1.4px solid #fff; padding:0 6px 1px; }
+.formula .frac .den{ padding:1px 6px 0; }
+.formula .small{ font-size:10.5px; }
+.formula .sup{ font-size:9px; vertical-align:super; }
+.formula em{ color:var(--yellow); font-style:normal; font-weight:700; }
+.formula .uc{ color:var(--cyan); font-weight:700; }
+.formula-note{ font-size:10px; color:var(--muted); margin-top:4px; text-align:center; line-height:1.5; }
+.formula-note b{ color:var(--yellow); }
+
+/* n5 objective */
+.obj-wrap{ margin-top:8px; }
+.obj-eq{
+  font-family:'Cambria Math',serif; font-size:14px; text-align:center; color:#fff; padding:8px 4px;
+  background:rgba(255,138,61,.07); border:1px dashed rgba(255,138,61,.35); border-radius:8px;
+}
+.obj-eq .J{ color:var(--orange); font-weight:700; font-style:italic; }
+.obj-eq .frac{ display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; }
+.obj-eq .frac .num{ border-bottom:1.3px solid #fff; padding:0 6px; }
+.obj-eq .frac .den{ padding:0 6px; }
+.tricks{ margin-top:7px; display:flex; flex-direction:column; gap:4px; }
+.trick{ font-size:10px; color:#c7ccdc; display:flex; gap:6px; align-items:flex-start; }
+.trick .b{ flex:none; width:16px; height:16px; border-radius:4px; background:rgba(255,138,61,.18);
+  color:var(--orange); font-weight:800; font-size:9px; display:flex; align-items:center; justify-content:center; margin-top:1px;}
+
+/* n6 gradient descent */
+.grad-vis{ margin-top:9px; display:flex; flex-direction:column; gap:7px; align-items:center; }
+.grad-eq{ font-family:'JetBrains Mono',monospace; font-size:11px; color:#fff; text-align:center;
+  background:rgba(167,139,250,.08); border:1px dashed rgba(167,139,250,.35); border-radius:8px; padding:5px 6px; width:100%;}
+.grad-eq .obs{ color:var(--green); }
+.grad-eq .exp{ color:var(--red); }
+.grad-eq .label{ color:var(--muted); font-size:9px; display:block; margin-top:2px;}
+.slider{ position:relative; width:100%; height:34px; }
+.slider svg{ width:100%; height:100%; overflow:visible; }
+.ball{ fill:var(--purple); filter:drop-shadow(0 0 8px rgba(167,139,250,.9)); }
+
+/* ============ LOOP BAND (gradient feedback) ============ */
+.loopband{
+  position:relative; margin-top:14px; height:64px;
+  border:1px dashed rgba(255,138,61,.35); border-radius:14px;
+  background:linear-gradient(90deg, rgba(255,138,61,.05), rgba(167,139,250,.05), rgba(52,211,153,.05));
+  display:flex; align-items:center; justify-content:center; gap:14px; padding:0 20px;
+  opacity:0; animation:fadeUp .9s ease 2.1s forwards;
+}
+.loopband .lab{ font-size:12px; color:#dfe3f1; }
+.loopband .lab b{ color:var(--orange); }
+.loopband .lab i{ color:var(--purple); font-style:normal; }
+.flowdots{ position:absolute; left:0; right:0; top:0; bottom:0; pointer-events:none; }
+.flowdots span{ position:absolute; top:50%; width:7px; height:7px; border-radius:50%;
+  transform:translateY(-50%); box-shadow:0 0 10px currentColor; }
+
+/* ============ RESULTS GRID ============ */
+.results{
+  display:grid; grid-template-columns: 1.15fr .85fr; gap:16px; margin-top:18px;
+}
+.panel{
+  background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px 18px 16px;
+  backdrop-filter:blur(8px); position:relative; overflow:hidden;
+  opacity:0; transform:translateY(20px); animation:fadeUp .9s ease forwards;
+}
+.panel.p1{ animation-delay:2.4s; }
+.panel.p2{ animation-delay:2.6s; }
+.panel h2{ font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.panel h2 .pill{ font-size:10px; font-weight:700; color:var(--green); background:rgba(52,211,153,.14);
+  padding:2px 8px; border-radius:5px; letter-spacing:.5px;}
+.panel .desc{ font-size:11.5px; color:var(--muted); margin-bottom:12px; line-height:1.6; }
+.panel .desc b{ color:#cdd3e6; }
+
+/* vector space svg */
+#vecspace{ width:100%; height:280px; display:block; }
+.cluster-label{ font-size:9.5px; fill:#8a8fa8; font-family:'Inter'; }
+.word-pt{ transition:.3s; cursor:pointer; }
+.word-pt:hover{ filter:drop-shadow(0 0 6px currentColor); }
+
+/* analogy */
+.analogy{ display:flex; flex-direction:column; gap:14px; }
+.eq-row{ display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; }
+.chip{
+  font-size:13px; font-weight:700; padding:7px 11px; border-radius:9px; border:1px solid;
+  font-family:'JetBrains Mono',monospace; position:relative;
+  transition:.35s;
+}
+.chip .v{ display:block; font-size:8px; opacity:.55; margin-top:1px; font-weight:500; letter-spacing:.3px;}
+.chip.king{ color:var(--blue); border-color:rgba(74,158,255,.45); background:rgba(74,158,255,.10); }
+.chip.man{ color:var(--cyan); border-color:rgba(34,211,238,.45); background:rgba(34,211,238,.10); }
+.chip.woman{ color:var(--yellow); border-color:rgba(254,202,87,.45); background:rgba(254,202,87,.10); }
+.chip.queen{ color:var(--green); border-color:rgba(52,211,153,.45); background:rgba(52,211,153,.10); }
+.chip.glow{ box-shadow:0 0 22px currentColor; transform:translateY(-2px); }
+.op{ font-size:18px; color:#fff; font-weight:800; }
+.eq-arrow{ font-size:13px; color:var(--muted); text-align:center; letter-spacing:1px; }
+
+.analogy-svg{ width:100%; height:170px; }
+.analogy-note{ font-size:11px; color:var(--muted); text-align:center; line-height:1.6; }
+.analogy-note b{ color:var(--green); }
+
+/* ============ MATH BREAKDOWN ============ */
+.mathgrid{
+  display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px;
+}
+.mcard{
+  background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px;
+  position:relative; opacity:0; transform:translateY(18px); animation:fadeUp .8s ease forwards;
+}
+.mcard.m1{ animation-delay:2.9s; --accent:var(--yellow);}
+.mcard.m2{ animation-delay:3.05s; --accent:var(--orange);}
+.mcard.m3{ animation-delay:3.2s; --accent:var(--purple);}
+.mcard::before{
+  content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px; border-radius:3px;
+  background:var(--accent);
+}
+.mcard h4{ font-size:13px; font-weight:800; color:#fff; margin-bottom:6px; padding-left:8px;}
+.mcard h4 .n{ color:var(--accent); font-family:'Inter'; margin-right:6px; }
+.mcard .eq{ font-family:'Cambria Math',serif; font-size:13px; color:#fff; text-align:center; padding:8px 4px;
+  background:rgba(255,255,255,.03); border-radius:8px; margin-bottom:7px;}
+.mcard p{ font-size:11px; line-height:1.6; color:#b9bdce; padding-left:8px;}
+.mcard p b{ color:var(--accent); }
+
+/* footer */
+.foot{ text-align:center; margin-top:26px; font-size:11px; color:var(--muted); line-height:1.7;
+  opacity:0; animation:fadeUp .8s ease 3.4s forwards; }
+.foot b{ color:#cdd3e6; }
+
+/* ============ KEYFRAMES ============ */
+@keyframes fadeUp{ from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:translateY(0);} }
+@keyframes nodeIn{ from{opacity:0; transform:translateY(20px) scale(.97);} to{opacity:1; transform:translateY(0) scale(1);} }
+@keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+@keyframes cursorBlink{ 0%,100%{opacity:1;} 50%{opacity:0;} }
+@keyframes flowX{ 0%{left:0%; opacity:0;} 10%{opacity:1;} 90%{opacity:1;} 100%{left:100%; opacity:0;} }
+
+@keyframes pulse{
+  0%,100%{ filter:drop-shadow(0 0 4px currentColor); }
+  50%{ filter:drop-shadow(0 0 14px currentColor); }
+}
+.pulse{ animation:pulse 2.2s ease-in-out infinite; }
+
+@keyframes dash{ to{ stroke-dashoffset:-200; } }
+
+@keyframes ballRoll{
+  0%{ transform:translate(8px,28px); }
+  50%{ transform:translate(150px,8px); }
+  100%{ transform:translate(292px,28px); }
+}
+
+/* responsive */
+@media (max-width: 1200px){
+  .pipeline{ grid-template-columns: repeat(3,1fr); }
+  .results{ grid-template-columns:1fr; }
+  .mathgrid{ grid-template-columns:1fr; }
+}
+@media (max-width: 720px){
+  .pipeline{ grid-template-columns: repeat(2,1fr); }
+  .hero h1{ font-size:28px; }
+  .stage{ padding:24px 14px 40px;}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="stage">
+
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <div class="kicker"><span class="dot"></span> Stanford CS224N · Lecture 1 · Christopher Manning</div>
+    <h1>Word2Vec：<span class="en">词向量原理演示</span></h1>
+    <p class="sub">
+      如何让计算机「<b>理解词义</b>」？2013 年 Mikolov 等人提出的 <b>Word2Vec</b> 给出了一个优雅的回答——
+      <span class="q">"You shall know a word by the company it keeps."</span>（J.R. Firth, 1957）
+      <br>用一个 <b>dense vector</b> 表达每个词，由 <b>objective function</b> 驱动 <b>gradient descent</b>，从语料中自动学出语义。
+    </p>
+  </header>
+
+  <!-- ============ MAIN PIPELINE ============ -->
+  <section class="pipeline" id="pipeline">
+
+    <!-- N1 Corpus -->
+    <div class="node n1">
+      <span class="step">01</span>
+      <div class="tag">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+        Corpus
+      </div>
+      <h3>原始文本语料 <span class="en">corpus</span></h3>
+      <p>一切从一段文本开始。NLP 中称之为 <b>corpus</b>（语料，复数 <b>corpora</b>），即一个长长的词序列。</p>
+      <div class="corpus">
+        the government debt problems<br>
+        turning <span class="hl">into banking</span> crises<br>
+        as <span class="hl">banking</span> systems faltered<span class="cursor"></span>
+      </div>
+    </div>
+
+    <!-- N2 Context window -->
+    <div class="node n2">
+      <span class="step">02</span>
+      <div class="tag">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M9 6v12M15 6v12"/></svg>
+        Context
+      </div>
+      <h3>统计上下文 <span class="en">distributional</span></h3>
+      <p><b>分布式语义</b>：一个词的意义由它出现的上下文决定。窗口大小 m=2，取中心词前后各 2 个词。</p>
+      <div class="window-wrap">
+        <div class="tokens" id="winTokens">
+          <span class="tok ctx">debt</span>
+          <span class="tok ctx">problems</span>
+          <span class="tok center">banking</span>
+          <span class="tok ctx">crises</span>
+          <span class="tok ctx">as</span>
+        </div>
+        <div class="win-label">中心词 center = <b>banking</b> · 上下文 context = ±2</div>
+      </div>
+    </div>
+
+    <!-- N3 Dense vector -->
+    <div class="node n3">
+      <span class="step">03</span>
+      <div class="tag">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+        Vector
+      </div>
+      <h3>稠密向量 <span class="en">embedding</span></h3>
+      <p>为每个 <b>word type</b> 学一个 d 维实数向量（实践中 d≈100~2000）。每个词还有两套向量：center 向量 v 与 outside 向量 u。</p>
+      <div class="vec-block">
+        <div class="vecrow">
+          <span class="w">banking</span>
+          <div class="vecbar" data-word="banking"></div>
+        </div>
+        <div class="vecrow">
+          <span class="w">monetary</span>
+          <div class="vecbar" data-word="monetary"></div>
+        </div>
+        <div class="vecrow">
+          <span class="w">crises</span>
+          <div class="vecbar" data-word="crises"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- N4 Softmax probability -->
+    <div class="node n4">
+      <span class="step">04</span>
+      <div class="tag">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
+        Softmax
+      </div>
+      <h3>计算共现概率 <span class="en">softmax</span></h3>
+      <p>用两个词向量的 <b>点积</b> 衡量相似度，<b>指数化</b> 保证为正，再 <b>归一化</b> 成概率。</p>
+      <div class="formula">
+        P(o | c) =
+        <span class="frac">
+          <span class="num">exp(<span class="uc">u<sub>o</sub></span> · <span class="uc">v<sub>c</sub></span>)</span>
+          <span class="den"><span class="small">Σ<sub>w=1..V</sub></span> exp(<span class="uc">u<sub>w</sub></span> · <span class="uc">v<sub>c</sub></span>)</span>
+        </span>
+      </div>
+      <div class="formula-note">点积大 → 相似 → <b>共现概率高</b></div>
+    </div>
+
+    <!-- N5 Objective -->
+    <div class="node n5">
+      <span class="step">05</span>
+      <div class="tag">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Objective
+      </div>
+      <h3>目标函数 <span class="en">loss</span></h3>
+      <p>最大化共现概率 ⇔ 最小化 <b>平均负对数似然</b>（两个常用 trick）。</p>
+      <div class="obj-wrap">
+        <div class="obj-eq">
+          <span class="J">J(θ)</span> = −
+          <span class="frac">
+            <span class="num">1</span>
+            <span class="den">T</span>
+          </span>
+          Σ Σ log P(o | c)
+        </div>
+        <div class="tricks">
+          <div class="trick"><span class="b">−</span><span>加负号 → 把<b>最大化</b>翻成<b>最小化</b>（gradient descent）</span></div>
+          <div class="trick"><span class="b">log</span><span>取 log → 巨大<b>连乘</b>变成<b>连加</b>，数学更稳定</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- N6 Gradient descent -->
+    <div class="node n6">
+      <span class="step">06</span>
+      <div class="tag">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+        Gradient
+      </div>
+      <h3>梯度下降 <span class="en">optimization</span></h3>
+      <p>对参数 θ（即所有词向量）求导，沿梯度反方向迭代更新，损失曲面逐步滑向最小值。</p>
+      <div class="grad-vis">
+        <div class="grad-eq">
+          ∂J/∂v<sub>c</sub> = <span class="obs">u<sub>o</sub></span> − Σ<sub>w</sub> P(w|c)·<span class="exp">u<sub>w</sub></span>
+          <span class="label">观察值 observed − 期望值 expected</span>
+        </div>
+        <div class="slider">
+          <svg viewBox="0 0 300 40" preserveAspectRatio="none">
+            <path d="M5 32 Q 80 32, 110 14 T 220 14 Q 260 14, 295 30" fill="none"
+                  stroke="rgba(167,139,250,.5)" stroke-width="2" stroke-dasharray="4 4"/>
+            <circle id="gdBall" class="ball" cx="8" cy="28" r="5"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- SVG arrows overlay -->
+    <div class="arrows">
+      <svg viewBox="0 0 1480 230" preserveAspectRatio="none" id="arrowSvg">
+        <defs>
+          <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="rgba(255,255,255,.55)"/>
+          </marker>
+          <linearGradient id="lg" x1="0" x2="1">
+            <stop offset="0" stop-color="#4a9eff" stop-opacity=".0"/>
+            <stop offset=".5" stop-color="#ffffff" stop-opacity=".7"/>
+            <stop offset="1" stop-color="#a78bfa" stop-opacity=".0"/>
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ============ LOOP BAND ============ -->
+  <div class="loopband">
+    <svg class="flowdots" viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;">
+      <path d="M2,50 C 25,8 75,8 98,50" fill="none" stroke="rgba(255,138,61,.35)" stroke-width=".5" stroke-dasharray="1.5 1.5"/>
+    </svg>
+    <div class="lab">
+      <b>↻ 反复迭代</b> &nbsp;gradient 修正词向量 → 重算 softmax → 重算 loss → 直至收敛 &nbsp;<i>θ ← θ − η · ∇J(θ)</i>
+    </div>
+  </div>
+
+  <!-- ============ RESULTS ============ -->
+  <section class="results">
+
+    <!-- Vector space panel -->
+    <div class="panel p1">
+      <h2>向量空间：相似词自动聚类 <span class="pill">Vector Space</span></h2>
+      <p class="desc">
+        训练完成后，所有词被 <b>embedded</b> 进一个高维语义空间（图为 t-SNE 降维示意）。
+        意义相近的词 <b>距离近</b>，并沿不同维度形成可解释的<b>结构</b>（国家、动词、专业术语、情绪……）。
+      </p>
+      <svg id="vecspace" viewBox="0 0 600 280">
+        <defs>
+          <radialGradient id="clusterGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="currentColor" stop-opacity=".25"/>
+            <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+
+        <!-- cluster halos -->
+        <g opacity=".5">
+          <circle cx="130" cy="80" r="78" fill="url(#clusterGlow)" color="#4a9eff"/>
+          <circle cx="450" cy="80" r="70" fill="url(#clusterGlow)" color="#feca57"/>
+          <circle cx="150" cy="210" r="68" fill="url(#clusterGlow)" color="#34d399"/>
+          <circle cx="450" cy="210" r="72" fill="url(#clusterGlow)" color="#ff8a3d"/>
+        </g>
+
+        <!-- cluster A: countries -->
+        <g class="cluster" color="#4a9eff" font-family="Inter" font-size="11" font-weight="700" fill="#9ec5ff">
+          <text x="60" y="38" class="cluster-label" fill="#4a9eff">COUNTRIES</text>
+          <text class="word-pt" x="90"  y="68">France</text>
+          <text class="word-pt" x="135" y="92">Germany</text>
+          <text class="word-pt" x="80"  y="100">Italy</text>
+          <text class="word-pt" x="120" y="60">Spain</text>
+          <text class="word-pt" x="160" y="78">Japan</text>
+          <text class="word-pt" x="95"  y="118">China</text>
+          <text class="word-pt" x="150" y="110">Korea</text>
+        </g>
+
+        <!-- cluster B: nationality -->
+        <g class="cluster" color="#feca57" font-family="Inter" font-size="11" font-weight="700" fill="#ffe39a">
+          <text x="390" y="38" class="cluster-label" fill="#feca57">NATIONALITY</text>
+          <text class="word-pt" x="410" y="64">French</text>
+          <text class="word-pt" x="455" y="86">German</text>
+          <text class="word-pt" x="405" y="96">Italian</text>
+          <text class="word-pt" x="448" y="62">Spanish</text>
+          <text class="word-pt" x="485" y="78">Japanese</text>
+          <text class="word-pt" x="418" y="110">British</text>
+          <text class="word-pt" x="468" y="108">American</text>
+        </g>
+
+        <!-- cluster C: verbs (say/think) -->
+        <g class="cluster" color="#34d399" font-family="Inter" font-size="11" font-weight="700" fill="#9ff0c6">
+          <text x="70" y="170" class="cluster-label" fill="#34d399">VERBS · speech</text>
+          <text class="word-pt" x="80"  y="195">said</text>
+          <text class="word-pt" x="115" y="212">told</text>
+          <text class="word-pt" x="85"  y="222">spoke</text>
+          <text class="word-pt" x="120" y="200">expected</text>
+          <text class="word-pt" x="160" y="218">thought</text>
+          <text class="word-pt" x="170" y="195">believed</text>
+        </g>
+
+        <!-- cluster D: finance/banking -->
+        <g class="cluster" color="#ff8a3d" font-family="Inter" font-size="11" font-weight="700" fill="#ffc09f">
+          <text x="378" y="170" class="cluster-label" fill="#ff8a3d">FINANCE</text>
+          <text class="word-pt" x="395" y="195">banking</text>
+          <text class="word-pt" x="445" y="210">monetary</text>
+          <text class="word-pt" x="398" y="220">crises</text>
+          <text class="word-pt" x="450" y="198">debt</text>
+          <text class="word-pt" x="488" y="215">fiscal</text>
+          <text class="word-pt" x="478" y="195">currency</text>
+        </g>
+
+        <!-- cross-cluster dashed links (semantic structure) -->
+        <g stroke="rgba(255,255,255,.12)" stroke-width="1" stroke-dasharray="2 3" fill="none">
+          <path d="M115,68 C 250,40 360,55 430,64"/>
+          <path d="M105,100 C 250,110 360,100 430,96"/>
+          <path d="M155,78 C 280,60 380,70 470,78"/>
+          <path d="M160,210 C 290,205 360,205 445,210"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Analogy panel -->
+    <div class="panel p2">
+      <h2>词类比运算 <span class="pill" style="color:var(--yellow);background:rgba(254,202,87,.14)">king − man + woman = ?</span></h2>
+      <p class="desc">
+        向量空间不仅有<b>距离</b>，还有有意义的<b>方向</b>。
+        把 <b>king</b> 沿「male→female」方向平移，恰好落在 <b>queen</b> 附近——线性代数抓住了语义关系。
+      </p>
+
+      <div class="analogy">
+        <div class="eq-row" id="eqRow">
+          <span class="chip king" id="cKing">king<span class="v">vec(king)</span></span>
+          <span class="op">−</span>
+          <span class="chip man" id="cMan">man<span class="v">vec(man)</span></span>
+          <span class="op">+</span>
+          <span class="chip woman" id="cWoman">woman<span class="v">vec(woman)</span></span>
+          <span class="op">=</span>
+          <span class="chip queen pulse" id="cQueen">queen<span class="v">≈ predicted</span></span>
+        </div>
+
+        <svg class="analogy-svg" viewBox="0 0 360 170">
+          <defs>
+            <marker id="ahead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="#fff"/>
+            </marker>
+          </defs>
+          <!-- axes faint -->
+          <line x1="20" y1="150" x2="340" y2="150" stroke="rgba(255,255,255,.12)"/>
+          <line x1="20" y1="20"  x2="20"  y2="150" stroke="rgba(255,255,255,.12)"/>
+
+          <!-- points -->
+          <g font-family="Inter" font-size="12" font-weight="700">
+            <circle cx="80"  cy="50" r="6" fill="#4a9eff"/>
+            <text x="60"  y="42" fill="#9ec5ff">king</text>
+
+            <circle cx="120" cy="110" r="6" fill="#22d3ee"/>
+            <text x="105" y="128" fill="#9fe9f5">man</text>
+
+            <circle cx="240" cy="110" r="6" fill="#feca57"/>
+            <text x="228" y="128" fill="#ffe39a">woman</text>
+
+            <circle cx="280" cy="50" r="7" fill="#34d399" class="pulse"/>
+            <text x="262" y="42" fill="#9ff0c6">queen</text>
+          </g>
+
+          <!-- vectors -->
+          <line x1="120" y1="110" x2="240" y2="110" stroke="#feca57" stroke-width="2" marker-end="url(#ahead)" stroke-dasharray="4 3"/>
+          <line x1="80"  y1="50"  x2="280" y2="50"  stroke="#34d399" stroke-width="2" marker-end="url(#ahead)"/>
+          <line x1="80"  y1="50"  x2="120" y2="110" stroke="rgba(74,158,255,.7)" stroke-width="1.5" stroke-dasharray="3 3"/>
+
+          <text x="160" y="124" font-size="10" fill="#feca57" font-family="JetBrains Mono">woman − man</text>
+          <text x="155" y="44"  font-size="10" fill="#34d399" font-family="JetBrains Mono">king + (w−m)</text>
+        </svg>
+
+        <p class="analogy-note">
+          <b>方向 = 语义关系</b>：空间中每一根向量都对应一种人类可解读的含义（性别、时态、地理、比较级……）。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MATH BREAKDOWN ============ -->
+  <section class="mathgrid">
+    <div class="mcard m1">
+      <h4><span class="n">①</span>Likelihood · 似然</h4>
+      <div class="eq">L(θ) = Π<sub>t=1..T</sub> Π<sub>−m≤j≤m</sub> P(w<sub>t+j</sub> | w<sub>t</sub>)</div>
+      <p>遍历语料每个位置 t，让窗口内每个上下文词的<b>共现概率</b>尽可能大。这是「原汁原味」的最大似然目标。</p>
+    </div>
+    <div class="mcard m2">
+      <h4><span class="n">②</span>Objective · 目标函数</h4>
+      <div class="eq">J(θ) = −(1/T) Σ Σ log P(o|c)</div>
+      <p>加负号 → 最小化；取 log → 连乘变连加，数值稳定；除 T → 化为<b>平均</b>损失，与语料规模无关。</p>
+    </div>
+    <div class="mcard m3">
+      <h4><span class="n">③</span>Gradient · 梯度</h4>
+      <div class="eq">∂J/∂v<sub>c</sub> = u<sub>o</sub> − Σ P(w|c)·u<sub>w</sub></div>
+      <p>经典 <b>observed − expected</b> 结构：让模型对上下文的<b>预测分布</b>去逼近<b>真实观测</b>，差值为 0 即收敛。</p>
+    </div>
+  </section>
+
+  <div class="foot">
+    内容整理自 <b>Stanford CS224N (2024) Lecture 1</b>，Christopher Manning 主讲 · Word2Vec 由 <b>Tomas Mikolov et al., 2013</b> 提出<br>
+    原理链路：语料 → 上下文统计（分布式语义）→ 稠密词向量 → softmax 概率 → objective function → gradient descent → 语义向量空间
+  </div>
+
+</div>
+
+<script>
+/* ===================== 背景：流动星点 ===================== */
+const bg = document.getElementById('bgCanvas');
+const bx = bg.getContext('2d');
+let bw, bh, stars=[];
+function resizeBg(){ bw = bg.width = innerWidth; bh = bg.height = innerHeight; }
+resizeBg(); addEventListener('resize', resizeBg);
+for(let i=0;i<140;i++){
+  stars.push({
+    x:Math.random()*bw, y:Math.random()*bh,
+    r:Math.random()*1.6+.3,
+    a:Math.random()*.5+.1,
+    vx:(Math.random()-.5)*.25, vy:(Math.random()-.5)*.25,
+    c: ['#4a9eff','#a78bfa','#34d399','#feca57','#22d3ee'][Math.floor(Math.random()*5)]
+  });
+}
+function tickBg(){
+  bx.clearRect(0,0,bw,bh);
+  for(const s of stars){
+    s.x+=s.vx; s.y+=s.vy;
+    if(s.x<0)s.x=bw; if(s.x>bw)s.x=0;
+    if(s.y<0)s.y=bh; if(s.y>bh)s.y=0;
+    bx.beginPath();
+    bx.fillStyle = s.c.replace(')', `,${s.a})`).replace('rgb','rgba').replace('#','');
+    // simple hex to rgba
+    const hex=s.c, r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    bx.fillStyle=`rgba(${r},${g},${b},${s.a})`;
+    bx.arc(s.x,s.y,s.r,0,Math.PI*2); bx.fill();
+  }
+  requestAnimationFrame(tickBg);
+}
+tickBg();
+
+/* ===================== 稠密向量 bars（n3） ===================== */
+function rng(seed){ let x=Math.sin(seed)*10000; return x-Math.floor(x); }
+function buildVecBars(){
+  const seeds = { banking:[0.7,0.6,-0.4,0.8,0.2,-0.5,0.9,-0.1],
+                  monetary:[0.65,0.55,-0.35,0.75,0.15,-0.45,0.85,-0.05],
+                  crises:[-0.2,0.1,0.8,-0.3,0.6,0.7,-0.4,0.5] };
+  const colors={ banking:'#34d399', monetary:'#22d3ee', crises:'#feca57' };
+  document.querySelectorAll('.vecbar').forEach(bar=>{
+    const word = bar.dataset.word;
+    const vec = seeds[word]; const col = colors[word];
+    bar.innerHTML='';
+    vec.forEach((v,i)=>{
+      const c=document.createElement('div'); c.className='cell';
+      const mag = Math.abs(v);
+      const positive = v>=0;
+      c.style.background = positive ? col : '#ef4d5e';
+      // height-like opacity to encode magnitude
+      c.style.opacity = (0.35 + mag*0.65).toFixed(2);
+      c.title = v.toFixed(2);
+      // animate in
+      c.style.transform='scaleY(0)'; c.style.transformOrigin='center';
+      setTimeout(()=>{ c.style.transition='transform .5s ease'; c.style.transform='scaleY(1)'; }, 1500 + i*60);
+      bar.appendChild(c);
+    });
+    // value text
+    const val=document.createElement('span'); val.className='val';
+    val.textContent = vec[0].toFixed(1)+'…';
+    bar.parentElement.querySelector('.val')?.remove();
+    bar.parentElement.appendChild(val);
+  });
+}
+buildVecBars();
+
+/* ===================== 上下文窗口滑动（n2） ===================== */
+const corpusWords = ['the','government','debt','problems','turning','into','banking','crises','as','banking','systems','faltered'];
+const winTokens = document.getElementById('winTokens');
+let wpos = 6; // start at 'banking'
+function renderWindow(){
+  const m=2;
+  winTokens.innerHTML='';
+  for(let j=-m;j<=m;j++){
+    const idx=(wpos+j+corpusWords.length)%corpusWords.length;
+    const span=document.createElement('span');
+    span.className='tok'+(j===0?' center':' ctx');
+    span.textContent=corpusWords[idx];
+    winTokens.appendChild(span);
+  }
+}
+renderWindow();
+setInterval(()=>{
+  wpos=(wpos+1)%corpusWords.length;
+  renderWindow();
+}, 2200);
+
+/* ===================== 梯度下降小球（n6） ===================== */
+const gdBall = document.getElementById('gdBall');
+let gdT=0;
+function tickBall(){
+  gdT += 0.012;
+  const t = gdT % 1;
+  // parametric curve matching the SVG path: ~M5 32 Q 80 32 110 14 T 220 14 Q 260 14 295 30
+  // approximate with a few bezier segments blended
+  let x,y;
+  if(t<0.33){
+    const u=t/0.33;
+    x = lerp(8,150,u); y = lerp(28,8,smooth(u));
+  } else if(t<0.66){
+    const u=(t-0.33)/0.33;
+    x = lerp(150,220,u); y = 8 + Math.sin(u*Math.PI)*0;
+    x=lerp(150,230,u); y=lerp(8,10,smooth(u));
+  } else {
+    const u=(t-0.66)/0.34;
+    x = lerp(230,292,u); y = lerp(10,28,smooth(u));
+  }
+  gdBall.setAttribute('cx', x); gdBall.setAttribute('cy', y);
+  requestAnimationFrame(tickBall);
+}
+function lerp(a,b,t){ return a+(b-a)*t; }
+function smooth(t){ return t<.5? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+tickBall();
+
+/* ===================== 流动反馈点（loop band） ===================== */
+const loop = document.querySelector('.loopband');
+const flowColors=['#ff8a3d','#a78bfa','#34d399'];
+flowColors.forEach((c,i)=>{
+  for(let k=0;k<2;k++){
+    const d=document.createElement('span');
+    d.style.color=c; d.style.background=c;
+    d.style.animation=`flowX ${4+i*0.6}s linear infinite`;
+    d.style.animationDelay = `${i*0.8 + k*2}s`;
+    d.style.top = `${30 + (k%2)*16}%`;
+    loop.appendChild(d);
+  }
+});
+
+/* ===================== 词类比高亮循环（results） ===================== */
+const chips = ['cKing','cMan','cWoman','cQueen'].map(id=>document.getElementById(id));
+let ci=0;
+setInterval(()=>{
+  chips.forEach(c=>c.classList.remove('glow'));
+  chips[ci].classList.add('glow');
+  ci=(ci+1)%chips.length;
+}, 900);
+
+/* ===================== 管道节点间流动箭头（SVG overlay） ===================== */
+function buildPipelineArrows(){
+  const svg = document.getElementById('arrowSvg');
+  const pipeline = document.getElementById('pipeline');
+  const nodes = pipeline.querySelectorAll('.node');
+  if(nodes.length<2) return;
+
+  // wait for layout
+  requestAnimationFrame(()=>{
+    const pr = pipeline.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${pr.width} ${pr.height}`);
+    for(let i=0;i<nodes.length-1;i++){
+      const a = nodes[i].getBoundingClientRect();
+      const b = nodes[i+1].getBoundingClientRect();
+      const x1 = a.right - pr.left;
+      const x2 = b.left - pr.left;
+      const y  = a.top + a.height/2 - pr.top;
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',x1+2); line.setAttribute('y1',y);
+      line.setAttribute('x2',x2-2); line.setAttribute('y2',y);
+      line.setAttribute('stroke','url(#lg)');
+      line.setAttribute('stroke-width','2');
+      line.setAttribute('stroke-dasharray','5 5');
+      line.setAttribute('marker-end','url(#arrowHead)');
+      line.style.opacity=0;
+      line.style.transition='opacity .6s ease';
+      svg.appendChild(line);
+      setTimeout(()=>{ line.style.opacity='1'; }, 1900 + i*200);
+
+      // animate dash flow
+      const len = Math.hypot(x2-x1,0);
+      let off=0;
+      setInterval(()=>{ off = (off-1)%200; line.setAttribute('stroke-dashoffset', off); }, 40);
+    }
+  });
+}
+addEventListener('load', ()=> setTimeout(buildPipelineArrows, 100));
+addEventListener('resize', ()=>{
+  document.getElementById('arrowSvg').innerHTML =
+    '<defs><marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="rgba(255,255,255,.55)"/></marker><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#4a9eff" stop-opacity=".0"/><stop offset=".5" stop-color="#ffffff" stop-opacity=".7"/><stop offset="1" stop-color="#a78bfa" stop-opacity=".0"/></linearGradient></defs>';
+  buildPipelineArrows();
+});
+
+/* ===================== vector space: 悬浮高亮聚类 ===================== */
+document.querySelectorAll('#vecspace .cluster').forEach(g=>{
+  g.style.cursor='pointer';
+  g.addEventListener('mouseenter',()=>{
+    g.querySelectorAll('.word-pt').forEach(t=>{ t.style.fill=t.getAttribute('fill'); });
+    g.style.opacity='1';
+  });
+  g.addEventListener('mouseleave',()=>{ g.style.opacity='.9'; });
+});
+
+</script>
+</body>
+</html>

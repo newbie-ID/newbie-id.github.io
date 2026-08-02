@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS224N Lecture 1 · Word2Vec</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg1:#0a0820;
+  --bg2:#1a1442;
+  --bg3:#241b52;
+  --cyan:#22d3ee;
+  --blue:#60a5fa;
+  --purple:#a855f7;
+  --pink:#ec4899;
+  --amber:#fbbf24;
+  --green:#34d399;
+  --text:#e8eaf2;
+  --text-dim:#9aa0b4;
+  --text-bright:#ffffff;
+  --glass:rgba(255,255,255,0.055);
+  --glass-strong:rgba(255,255,255,0.09);
+  --border:rgba(255,255,255,0.13);
+  --grad-main:linear-gradient(135deg,#0a0820 0%,#1a1442 45%,#241b52 100%);
+  --grad-text:linear-gradient(120deg,#22d3ee 0%,#a855f7 55%,#ec4899 100%);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100%;overflow:hidden;
+  font-family:'Inter','Plus Jakarta Sans',-apple-system,sans-serif;
+  color:var(--text);
+  background:#050310;
+  -webkit-font-smoothing:antialiased;
+}
+#deck{
+  position:fixed;inset:0;
+}
+.slide{
+  position:absolute;inset:0;
+  display:none;
+  flex-direction:column;
+  padding:3.2vh 4.5vw 5vh;
+  background:
+    radial-gradient(ellipse 60% 50% at 18% 15%, rgba(168,85,247,0.20), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 85% 88%, rgba(34,211,238,0.16), transparent 60%),
+    radial-gradient(ellipse 40% 35% at 70% 20%, rgba(236,72,153,0.10), transparent 65%),
+    var(--grad-main);
+  overflow:hidden;
+  animation:slideIn .55s cubic-bezier(.2,.7,.2,1);
+}
+.slide.active{display:flex}
+@keyframes slideIn{
+  from{opacity:0;transform:translateX(40px) scale(.985)}
+  to{opacity:1;transform:translateX(0) scale(1)}
+}
+
+/* ============ REVEAL SYSTEM ============ */
+.reveal{
+  opacity:0;
+  transform:translateY(22px);
+  filter:blur(6px);
+  transition:opacity .7s cubic-bezier(.2,.7,.2,1),
+             transform .7s cubic-bezier(.2,.7,.2,1),
+             filter .7s ease;
+}
+.reveal.show{opacity:1;transform:translateY(0);filter:blur(0)}
+.reveal-left{transform:translateX(-30px)}
+.reveal-right{transform:translateX(30px)}
+.reveal-scale{transform:scale(.9)}
+.reveal-left.show,.reveal-right.show,.reveal-scale.show{transform:translateX(0) scale(1)}
+
+/* ============ TOP BAR ============ */
+.topbar{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:.78vw;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--text-dim);font-weight:600;
+  margin-bottom:1.6vh;
+}
+.topbar .brand{display:flex;align-items:center;gap:.6vw}
+.topbar .dot{
+  width:.55vw;height:.55vw;border-radius:50%;
+  background:var(--grad-text);box-shadow:0 0 12px rgba(168,85,247,.7);
+}
+.topbar .chapter{color:var(--cyan)}
+
+/* ============ TITLE BLOCK ============ */
+.eyebrow{
+  font-size:.95vw;font-weight:700;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--cyan);
+  margin-bottom:.9vh;
+}
+h1.title{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-weight:800;
+  font-size:clamp(2.4rem,4.4vw,5rem);
+  line-height:1.04;
+  letter-spacing:-.02em;
+  color:var(--text-bright);
+  margin-bottom:1vh;
+}
+h1.title .grad{
+  background:var(--grad-text);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+h2.subtitle{
+  font-size:clamp(1rem,1.5vw,1.6rem);
+  font-weight:500;color:var(--text-dim);
+  margin-bottom:2.5vh;letter-spacing:.01em;
+}
+.section-head{
+  display:flex;align-items:baseline;gap:1.2vw;margin-bottom:2.2vh;
+  flex-wrap:wrap;
+}
+.section-head .num{
+  font-family:'JetBrains Mono',monospace;
+  font-size:clamp(1.4rem,2.2vw,2.4rem);font-weight:700;
+  background:var(--grad-text);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  line-height:1;
+}
+.section-head h2{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-weight:800;font-size:clamp(1.6rem,2.8vw,3rem);
+  color:var(--text-bright);line-height:1.05;letter-spacing:-.015em;
+}
+.section-head .kicker{
+  font-size:.85vw;color:var(--text-dim);font-weight:500;
+  letter-spacing:.04em;
+}
+
+/* ============ CARDS ============ */
+.card{
+  background:var(--glass);
+  border:1px solid var(--border);
+  border-radius:1.1rem;
+  padding:1.5vw 1.6vw;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  position:relative;
+  overflow:hidden;
+}
+.card.glow::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(circle at 30% 0%,rgba(168,85,247,.18),transparent 60%);
+  pointer-events:none;
+}
+.card h3{
+  font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:1.25vw;font-weight:700;color:var(--text-bright);
+  margin-bottom:.6vh;display:flex;align-items:center;gap:.5vw;
+}
+.card p{font-size:.95vw;line-height:1.55;color:var(--text-dim)}
+.card .ico{
+  width:2.2vw;height:2.2vw;border-radius:.6vw;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.1vw;flex-shrink:0;
+}
+
+/* highlight pill */
+.pill{
+  display:inline-flex;align-items:center;gap:.35vw;
+  padding:.2vh .7vw;border-radius:99px;
+  font-size:.8vw;font-weight:600;
+  background:rgba(34,211,238,.12);color:var(--cyan);
+  border:1px solid rgba(34,211,238,.3);
+}
+.pill.purple{background:rgba(168,85,247,.14);color:#d8b4fe;border-color:rgba(168,85,247,.35)}
+.pill.pink{background:rgba(236,72,153,.14);color:#f9a8d4;border-color:rgba(236,72,153,.35)}
+.pill.amber{background:rgba(251,191,36,.14);color:#fcd34d;border-color:rgba(251,191,36,.35)}
+.pill.green{background:rgba(52,211,153,.14);color:#6ee7b7;border-color:rgba(52,211,153,.35)}
+
+.grad-cyan{background:linear-gradient(135deg,#22d3ee,#3b82f6);-webkit-background-clip:text;background-clip:text;color:transparent}
+.grad-purple{background:linear-gradient(135deg,#a855f7,#ec4899);-webkit-background-clip:text;background-clip:text;color:transparent}
+.grad-amber{background:linear-gradient(135deg,#fbbf24,#f97316);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* ============ PROGRESS & PAGE NUM ============ */
+#progress-track{
+  position:fixed;top:0;left:0;right:0;height:3px;
+  background:rgba(255,255,255,.06);z-index:50;
+}
+#progress-fill{
+  height:100%;width:0;
+  background:var(--grad-text);
+  box-shadow:0 0 14px rgba(168,85,247,.8);
+  transition:width .5s cubic-bezier(.2,.7,.2,1);
+}
+#page-num{
+  position:fixed;bottom:1.6vh;right:1.6vw;z-index:50;
+  font-family:'JetBrains Mono',monospace;
+  font-size:.82vw;color:var(--text-dim);
+  background:var(--glass);border:1px solid var(--border);
+  padding:.5vh .8vw;border-radius:99px;backdrop-filter:blur(8px);
+}
+#page-num .cur{color:var(--text-bright);font-weight:700}
+#hint{
+  position:fixed;bottom:1.6vh;left:1.6vw;z-index:50;
+  font-size:.72vw;color:var(--text-dim);
+  font-family:'JetBrains Mono',monospace;letter-spacing:.08em;
+  opacity:.7;
+}
+.nav-zone{
+  position:fixed;top:0;bottom:0;width:9vw;z-index:40;cursor:pointer;
+}
+.nav-zone.left{left:0}
+.nav-zone.right{right:0}
+.nav-zone:hover{background:rgba(255,255,255,.025)}
+
+/* ============ SLIDE 1 : COVER ============ */
+.cover{
+  justify-content:center;align-items:flex-start;
+  padding-top:0;
+}
+.cover-bg-dots{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.float-dot{
+  position:absolute;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.9),rgba(168,85,247,.3));
+  animation:floatUp linear infinite;
+}
+@keyframes floatUp{
+  0%{transform:translateY(110vh) scale(.6);opacity:0}
+  10%{opacity:.9}
+  90%{opacity:.6}
+  100%{transform:translateY(-15vh) scale(1.1);opacity:0}
+}
+.cover-content{position:relative;z-index:2;width:100%}
+.cover-chips{display:flex;gap:.8vw;margin-top:2vh;flex-wrap:wrap}
+.cover-meta{
+  position:absolute;left:4.5vw;bottom:5vh;z-index:2;
+  font-size:.85vw;color:var(--text-dim);letter-spacing:.06em;
+}
+.cover-meta strong{color:var(--text-bright);font-weight:700}
+.vector-deco{
+  position:absolute;right:4vw;top:50%;transform:translateY(-50%);
+  width:30vw;max-width:480px;z-index:1;opacity:.85;
+}
+
+/* ============ GENERIC LAYOUT HELPERS ============ */
+.row{display:flex;gap:1.4vw}
+.col{display:flex;flex-direction:column;gap:1.2vw}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2vw}
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:1.2vw}
+.flex-grow{flex:1;min-height:0}
+.center-y{display:flex;align-items:center}
+.center-x{display:flex;justify-content:center}
+.footnote{
+  font-size:.78vw;color:var(--text-dim);
+  font-style:italic;letter-spacing:.02em;margin-top:auto;
+  border-left:2px solid var(--purple);padding-left:.8vw;
+}
+
+/* ============ PIPELINE (slide 2) ============ */
+.pipeline{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:.4vw;margin-top:.5vh;
+}
+.node{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  gap:.6vh;text-align:center;
+}
+.node .circle{
+  width:4.2vw;height:4.2vw;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--glass-strong);
+  border:1.5px solid var(--border);
+  font-size:1vw;font-weight:700;color:var(--text-bright);
+  position:relative;backdrop-filter:blur(8px);
+  transition:transform .3s;
+}
+.node:hover .circle{transform:translateY(-4px)}
+.node .lbl{font-size:.78vw;color:var(--text-dim);font-weight:500;line-height:1.2}
+.node .circle.c1{border-color:rgba(34,211,238,.55);box-shadow:0 0 18px rgba(34,211,238,.25)}
+.node .circle.c2{border-color:rgba(96,165,250,.55);box-shadow:0 0 18px rgba(96,165,250,.25)}
+.node .circle.c3{border-color:rgba(168,85,247,.55);box-shadow:0 0 18px rgba(168,85,247,.25)}
+.node .circle.c4{border-color:rgba(236,72,153,.55);box-shadow:0 0 18px rgba(236,72,153,.25)}
+.node .circle.c5{border-color:rgba(251,191,36,.55);box-shadow:0 0 18px rgba(251,191,36,.25)}
+.node .circle.c6{border-color:rgba(52,211,153,.55);box-shadow:0 0 18px rgba(52,211,153,.25)}
+.arrow-x{
+  flex:0 0 auto;color:var(--text-dim);font-size:1.2vw;opacity:.5;
+}
+
+/* ============ TIMELINE (slide 3) ============ */
+.timeline{
+  position:relative;display:flex;justify-content:space-between;
+  margin:1vh 1vw;padding:0 .5vw;
+}
+.timeline::before{
+  content:"";position:absolute;left:0;right:0;top:50%;
+  height:2px;background:linear-gradient(90deg,var(--cyan),var(--purple),var(--pink));
+  transform:translateY(-50%);opacity:.6;
+}
+.tl-node{
+  position:relative;display:flex;flex-direction:column;align-items:center;
+  background:transparent;z-index:2;flex:1;
+}
+.tl-node .pt{
+  width:1.3vw;height:1.3vw;border-radius:50%;
+  background:var(--bg2);border:2.5px solid var(--cyan);
+  box-shadow:0 0 16px rgba(34,211,238,.6);
+  margin-bottom:1vh;
+}
+.tl-node .pt.p2{border-color:var(--purple);box-shadow:0 0 16px rgba(168,85,247,.6)}
+.tl-node .pt.p3{border-color:var(--pink);box-shadow:0 0 16px rgba(236,72,153,.6)}
+.tl-node .yr{
+  font-family:'JetBrains Mono',monospace;font-weight:700;
+  font-size:1.1vw;color:var(--text-bright);margin-bottom:.3vh;
+}
+.tl-node .ev{font-size:.85vw;color:var(--text-dim);text-align:center;line-height:1.3;max-width:12vw}
+
+/* ============ MATH ============ */
+.math{
+  font-family:'JetBrains Mono','Cambria Math',serif;
+  background:rgba(0,0,0,.32);
+  border:1px solid var(--border);
+  border-radius:.8vw;
+  padding:1.4vh 1.4vw;
+  font-size:clamp(.95rem,1.25vw,1.5rem);
+  color:var(--text-bright);
+  text-align:center;letter-spacing:.02em;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+.math .var{color:var(--cyan)}
+.math .op{color:var(--text-dim)}
+.math .sub{font-size:.7em;vertical-align:sub}
+.math .sup{font-size:.7em;vertical-align:super}
+.math .em{color:var(--amber);font-weight:700}
+
+/* ============ TAG LIST ============ */
+.tag-list{display:flex;flex-wrap:wrap;gap:.5vw}
+.tag{
+  font-size:.82vw;font-weight:600;
+  padding:.5vh .8vw;border-radius:.5vw;
+  background:var(--glass);border:1px solid var(--border);
+  color:var(--text);
+}
+
+/* ============ SCATTER (slide 6) ============ */
+.scatter-svg{width:100%;height:100%}
+.scatter-svg text{fill:var(--text);font-size:11px;font-family:'Inter';font-weight:600}
+.cluster-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+
+/* ============ SOFTMAX STEPS ============ */
+.step-flow{display:flex;align-items:stretch;gap:.8vw}
+.step{
+  flex:1;background:var(--glass);border:1px solid var(--border);
+  border-radius:.8vw;padding:1.4vh 1vw;text-align:center;
+  position:relative;
+}
+.step .sn{
+  font-family:'JetBrains Mono',monospace;font-size:.7vw;
+  color:var(--cyan);font-weight:700;letter-spacing:.1em;
+}
+.step .stitle{font-size:1vw;font-weight:700;color:var(--text-bright);margin:.4vh 0}
+.step .sdesc{font-size:.78vw;color:var(--text-dim);line-height:1.4}
+.step-arrow{
+  display:flex;align-items:center;color:var(--purple);
+  font-size:1.6vw;font-weight:700;
+}
+
+/* ============ GRADING BARS ============ */
+.grade-row{display:flex;align-items:center;gap:1vw;margin-bottom:1vh}
+.grade-label{width:11vw;font-size:.9vw;font-weight:600;color:var(--text-bright)}
+.grade-bar-bg{
+  flex:1;height:2vh;background:rgba(255,255,255,.06);
+  border-radius:99px;overflow:hidden;border:1px solid var(--border);
+}
+.grade-bar{height:100%;border-radius:99px;transition:width 1s cubic-bezier(.2,.7,.2,1);width:0}
+.grade-pct{width:5vw;text-align:right;font-family:'JetBrains Mono',monospace;font-size:.9vw;font-weight:700;color:var(--text-bright)}
+
+/* code-style inline */
+code,.mono{font-family:'JetBrains Mono',monospace;font-size:.85em}
+.inline-code{
+  font-family:'JetBrains Mono',monospace;
+  background:rgba(0,0,0,.35);padding:.1vh .4vw;border-radius:.3vw;
+  color:var(--green);font-size:.85vw;
+}
+
+/* utility */
+.muted{color:var(--text-dim)}
+.bright{color:var(--text-bright)}
+.big-num{
+  font-family:'Plus Jakarta Sans',sans-serif;font-weight:900;
+  font-size:clamp(2rem,3.5vw,4rem);line-height:1;
+  background:var(--grad-text);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.kbox{
+  background:linear-gradient(135deg,rgba(34,211,238,.10),rgba(168,85,247,.10));
+  border:1px solid rgba(34,211,238,.3);
+  border-radius:.8vw;padding:1.4vh 1.4vw;
+}
+</style>
+</head>
+<body>
+
+<div id="progress-track"><div id="progress-fill"></div></div>
+
+<div id="deck">
+
+<!-- ============================================================ -->
+<!-- SLIDE 1 : COVER                                              -->
+<!-- ============================================================ -->
+<section class="slide cover active" data-slide="1">
+  <div class="cover-bg-dots" id="dotsContainer"></div>
+
+  <svg class="vector-deco" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="vg" cx="50%" cy="50%">
+        <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.9"/>
+        <stop offset="100%" stop-color="#a855f7" stop-opacity="0.1"/>
+      </radialGradient>
+      <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.5"/>
+        <stop offset="100%" stop-color="#ec4899" stop-opacity="0.2"/>
+      </linearGradient>
+    </defs>
+    <!-- grid axes -->
+    <line x1="50" y1="200" x2="380" y2="200" stroke="rgba(255,255,255,0.15)" stroke-dasharray="3,4"/>
+    <line x1="200" y1="30" x2="200" y2="370" stroke="rgba(255,255,255,0.15)" stroke-dasharray="3,4"/>
+    <!-- connecting lines -->
+    <line x1="120" y1="130" x2="180" y2="100" stroke="url(#lg)" stroke-width="1"/>
+    <line x1="180" y1="100" x2="240" y2="120" stroke="url(#lg)" stroke-width="1"/>
+    <line x1="240" y1="120" x2="280" y2="170" stroke="url(#lg)" stroke-width="1"/>
+    <line x1="280" y1="170" x2="300" y2="250" stroke="url(#lg)" stroke-width="1"/>
+    <line x1="120" y1="280" x2="180" y2="310" stroke="url(#lg)" stroke-width="1"/>
+    <line x1="180" y1="310" x2="250" y2="290" stroke="url(#lg)" stroke-width="1"/>
+    <!-- nodes -->
+    <circle cx="120" cy="130" r="6" fill="url(#vg)"/>
+    <circle cx="180" cy="100" r="8" fill="#22d3ee"/>
+    <circle cx="240" cy="120" r="6" fill="url(#vg)"/>
+    <circle cx="280" cy="170" r="7" fill="#a855f7"/>
+    <circle cx="300" cy="250" r="9" fill="#ec4899"/>
+    <circle cx="120" cy="280" r="6" fill="url(#vg)"/>
+    <circle cx="180" cy="310" r="8" fill="#fbbf24"/>
+    <circle cx="250" cy="290" r="6" fill="url(#vg)"/>
+    <circle cx="200" cy="200" r="10" fill="#fff" opacity="0.9"/>
+    <!-- labels -->
+    <text x="190" y="92" fill="#22d3ee" font-size="11" font-family="JetBrains Mono">v(king)</text>
+    <text x="295" y="265" fill="#ec4899" font-size="11" font-family="JetBrains Mono">v(queen)</text>
+    <text x="115" y="328" fill="#fbbf24" font-size="11" font-family="JetBrains Mono">v(man)</text>
+    <text x="200" y="194" fill="#fff" font-size="9" font-family="JetBrains Mono" text-anchor="middle">·</text>
+  </svg>
+
+  <div class="cover-content">
+    <div class="topbar reveal">
+      <div class="brand"><span class="dot"></span><span>Stanford · CS224N · Lecture 1</span></div>
+      <div class="chapter">Natural Language Processing</div>
+    </div>
+
+    <div style="margin-top:14vh">
+      <div class="eyebrow reveal" style="transition-delay:.1s">Deep Learning for Natural Language Processing</div>
+      <h1 class="title reveal" style="transition-delay:.25s">
+        从 <span class="grad">Word2Vec</span><br>开启语言智能之旅
+      </h1>
+      <h2 class="subtitle reveal" style="transition-delay:.5s">
+        词的向量表示 · 分布式语义 · 神经网络如何"理解"词义
+      </h2>
+      <div class="cover-chips reveal" style="transition-delay:.7s">
+        <span class="pill">Word Vectors</span>
+        <span class="pill purple">Distributional Semantics</span>
+        <span class="pill pink">Softmax</span>
+        <span class="pill amber">Gradient Descent</span>
+        <span class="pill green">Embeddings</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cover-meta reveal" style="transition-delay:.9s">
+    主讲 · <strong>Christopher Manning</strong> 教授 &nbsp;|&nbsp; Stanford University &nbsp;|&nbsp; 2024
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<!-- SLIDE 2 : CS224N 学什么                                       -->
+<!-- ============================================================ -->
+<section class="slide" data-slide="2">
+  <div class="topbar reveal">
+    <div class="brand"><span class="dot"></span><span>CS224N · 课程定位</span></div>
+    <div class="chapter">02 / 08</div>
+  </div>
+
+  <div class="section-head reveal">
+    <span class="num">01</span>
+    <h2>这门课要带你<span class="grad-purple">做到三件事</span></h2>
+  </div>
+
+  <div class="grid-3 reveal" style="transition-delay:.2s">
+    <div class="card glow">
+      <h3><span class="ico" style="background:rgba(34,211,238,.18);color:var(--cyan)">①</span>技术方法</h3>
+      <p>掌握深度学习用于 NLP 的<strong class="bright">基础与前沿方法</strong>，自底向上构建知识体系。</p>
+    </div>
+    <div class="card glow">
+      <h3><span class="ico" style="background:rgba(168,85,247,.18);color:var(--purple)">②</span>理解语言</h3>
+      <p>理解人类语言的<strong class="bright">结构与难点</strong>，以及计算机处理语言的困难所在。</p>
+    </div>
+    <div class="card glow">
+      <h3><span class="ico" style="background:rgba(236,72,153,.18);color:var(--pink)">③</span>构建系统</h3>
+      <p>真正动手<strong class="bright">搭建 NLP 系统</strong>——文本分类、信息抽取、问答检索。</p>
+    </div>
+  </div>
+
+  <div style="margin-top:3.2vh">
+    <div class="reveal" style="transition-delay:.4s;margin-bottom:1.2vh">
+      <span class="pill">METHOD PIPELINE</span>
+      <span class="muted" style="font-size:.85vw;margin-left:.6vw">从词向量一路走到智能体</span>
+    </div>
+    <div class="pipeline reveal" style="transition-delay:.55s">
+      <div class="node"><div class="circle c1">v</div><div class="lbl">Word<br>Vectors</div></div>
+      <div class="arrow-x">→</div>
+      <div class="node"><div class="circle c2">⊥</div><div class="lbl">Feed-Forward<br>Networks</div></div>
+      <div class="arrow-x">→</div>
+      <div class="node"><div class="circle c3">↻</div><div class="lbl">RNN /<br>Attention</div></div>
+      <div class="arrow-x">→</div>
+      <div class="node"><div class="circle c4">⌶</div><div class="lbl">Transformers<br>Enc-Dec</div></div>
+      <div class="arrow-x">→</div>
+      <div class="node"><div class="circle c5">LLM</div><div class="lbl">Pre / Post<br>Training</div></div>
+      <div class="arrow-x">→</div>
+      <div class="node"><div class="circle c6">◉</div><div class="lbl">Interpretability<br>& Agents</div></div>
+    </div>
+  </div>
+
+  <div class="footnote reveal" style="transition-delay:.8s">
+    "我们希望你能从这里毕业时会说：哦，第一份工作里那个文本分类系统——我知道怎么造，因为我上过 CS224N。"
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<!-- SLIDE 3 : 语言与人类智能                                      -->
+<!-- ============================================================ -->
+<section class="slide" data-slide="3">
+  <div class="topbar reveal">
+    <div class="brand"><span class="dot"></span><span>Human Language & Meaning</span></div>
+    <div class="chapter">03 / 08</div>
+  </div>
+
+  <div class="section-head reveal">
+    <span class="num">02</span>
+    <h2>语言，是<span class="grad-cyan">人类胜出</span>的关键</h2>
+    <span class="kicker">— 而不仅是沟通工具</span>
+  </div>
+
+  <div class="grid-2 reveal" style="transition-delay:.2s">
+    <div class="card glow">
+      <h3><span class="ico" style="background:rgba(52,211,153,.18);color:var(--green)">🧠</span>人 vs. 黑猩猩</h3>
+      <p style="margin-bottom:1vh">使用工具、计划、记忆力——黑猩猩几乎与人类相当（甚至短期记忆更强）。</p>
+      <div class="kbox"><p style="color:var(--text-bright);font-size:.95vw">
+        <strong>唯一显著的差异：人类拥有语言。</strong><br>
+        <span class="muted" style="font-size:.85vw">它让我们能沟通、协作，最终主宰地球。</span>
+      </p></div>
+    </div>
+    <div class="card glow">
+      <h3><span class="ico" style="background:rgba(251,191,36,.18);color:var(--amber)">💡</span>语言 = 思维的脚手架</h3>
+      <p style="margin-bottom:1vh">语言不止用于沟通，它还支撑着<strong class="bright">高层思维</strong>：规划、推理、自我对话。</p>
+      <div class="kbox" style="background:linear-gradient(135deg,rgba(251,191,36,.10),rgba(236,72,153,.10));border-color:rgba(251,191,36,.3)">
+        <p style="color:var(--text-bright);font-size:.95vw">
+          "我昨晚那句话是不是惹朋友不高兴了？我得想办法补救……"
+        </p>
+        <p class="muted" style="font-size:.8vw;margin-top:.4vh">— 我们几乎"用语言在思考"</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:2.5vh">
+    <div class="reveal" style="transition-delay:.45s;margin-bottom:1.5vh">
+      <span class="pill amber">EVOLUTION TIMELINE</span>
+      <span class="muted" style="font-size:.85vw;margin-left:.6vw">书写让知识跨越时空，把人类从青铜器送进智能手机</span>
+    </div>
+    <div class="timeline reveal" style="transition-delay:.6s">
+      <div class="tl-node">
+        <div class="pt"></div>
+        <div class="yr">~数十万年</div>
+        <div class="ev">口头语言<br>出现</div>
+      </div>
+      <div class="tl-node">
+        <div class="pt p2"></div>
+        <div class="yr">~5000 年</div>
+        <div class="ev">文字诞生<br>知识可记录</div>
+      </div>
+      <div class="tl-node">
+        <div class="pt p3"></div>
+        <div class="yr">2024</div>
+        <div class="ev">LLM / 多模态<br>Foundation Models</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote reveal" style="transition-delay:.85s">
+    “The common misconception is that language use has primarily to do with words and what they mean. It doesn't — it has primarily to do with <strong style="color:var(--cyan)">people and what they mean</strong>.” — Herb Clark, Stanford
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<!-- SLIDE 4 : 什么是词义                                          -->
+<!-- ============================================================ -->
+<section class="slide" data-slide="4">
+  <div class="topbar reveal">
+    <div class="brand"><span class="dot"></span><span>Word Meaning</span></div>
+    <div class="chapter">04 / 08</div>
+  </div>
+
+  <div class="section-head reveal">
+    <span class="num">03</span>
+    <h2>什么是<span class="grad-amber">词义</span>？传统方案的困境</h2>
+  </div>
+
+  <div class="grid-2 reveal" style="transition-delay:.2s">
+    <!-- LEFT: Denotational + WordNet -->
+    <div class="col">
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(96,165,250,.18);color:var(--blue)">⛓</span>Denotational Semantics</h3>
+        <p style="margin-bottom:1vh">词 = 符号 ↔ 它所指代的<strong class="bright">概念/事物</strong></p>
+        <div style="display:flex;align-items:center;gap:1vw;justify-content:center;padding:1vh 0">
+          <div style="text-align:center">
+            <div class="inline-code" style="font-size:1.1vw">"tree"</div>
+            <div class="muted" style="font-size:.75vw">signifier 符号</div>
+          </div>
+          <div style="font-size:1.4vw;color:var(--cyan)">↔</div>
+          <div style="text-align:center">
+            <div style="font-size:1.4vw">🌳</div>
+            <div class="muted" style="font-size:.75vw">signified 所指</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(168,85,247,.18);color:var(--purple)">📖</span>WordNet · 传统同义词库</h3>
+        <div class="tag-list" style="margin:.4vh 0 .8vh">
+          <span class="tag">panda</span><span class="muted">→</span>
+          <span class="tag">carnivore</span><span class="muted">→</span>
+          <span class="tag">mammal</span>
+        </div>
+        <p class="muted" style="font-size:.85vw">
+          缺乏细微差别（proficient ≈ good？）<br>
+          不完整、缺少新词与俚语 · 难以计算
+        </p>
+      </div>
+    </div>
+
+    <!-- RIGHT: One-hot vectors -->
+    <div class="card" style="display:flex;flex-direction:column">
+      <h3><span class="ico" style="background:rgba(236,72,153,.18);color:var(--pink)">⋮</span>One-Hot Vectors · 局部表示</h3>
+      <p style="margin-bottom:1.2vh">词汇表里每个词 = 一个超长稀疏向量（维度 = 词汇量）</p>
+
+      <svg viewBox="0 0 380 200" style="width:100%;height:auto">
+        <!-- motel vector -->
+        <g font-family="JetBrains Mono" font-size="11">
+          <text x="0" y="40" fill="#ec4899">motel =</text>
+          <rect x="60" y="28" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="76" y="28" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="92" y="28" width="14" height="14" fill="#ec4899" stroke="#ec4899"/>
+          <rect x="108" y="28" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="124" y="28" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="140" y="28" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <text x="160" y="40" fill="#9aa0b4">... 0 0 0</text>
+
+          <text x="0" y="90" fill="#22d3ee">hotel =</text>
+          <rect x="60" y="78" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="76" y="78" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="92" y="78" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="108" y="78" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="124" y="78" width="14" height="14" fill="#22d3ee" stroke="#22d3ee"/>
+          <rect x="140" y="78" width="14" height="14" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)"/>
+          <text x="160" y="90" fill="#9aa0b4">... 0 0 0</text>
+        </g>
+        <!-- orthogonal indicator -->
+        <g transform="translate(60,130)">
+          <text x="0" y="0" font-family="Inter" font-size="12" fill="#fbbf24" font-weight="700">motel · hotel = 0</text>
+          <text x="0" y="20" font-family="Inter" font-size="11" fill="#9aa0b4">两向量正交 · 毫无相似性信息</text>
+          <text x="0" y="40" font-family="Inter" font-size="11" fill="#f9a8d4">→ 没有"天然的"语义相似度</text>
+        </g>
+      </svg>
+      <div class="footnote" style="margin-top:1vh">
+        局部表示 (localist)：每个词只在<strong class="bright">一个位置</strong>被表示。
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<!-- SLIDE 5 : Word2Vec 核心思想                                   -->
+<!-- ============================================================ -->
+<section class="slide" data-slide="5">
+  <div class="topbar reveal">
+    <div class="brand"><span class="dot"></span><span>The Word2Vec Idea</span></div>
+    <div class="chapter">05 / 08</div>
+  </div>
+
+  <div class="section-head reveal">
+    <span class="num">04</span>
+    <h2>分布式语义：<span class="grad-purple">"看一个词的伙伴"</span></h2>
+    <span class="kicker">— J.R. Firth, 1957</span>
+  </div>
+
+  <div class="kbox reveal" style="transition-delay:.2s;margin-bottom:2vh;text-align:center">
+    <p style="font-size:clamp(1.1rem,1.6vw,1.8rem);color:var(--text-bright);font-weight:600;font-style:italic">
+      "You shall know a word by <span class="grad-cyan">the company it keeps</span>."
+    </p>
+  </div>
+
+  <div class="grid-2 reveal" style="transition-delay:.35s">
+    <!-- LEFT: context window -->
+    <div class="card glow">
+      <h3><span class="ico" style="background:rgba(34,211,238,.18);color:var(--cyan)"> WINDOW</span>中心词 + 上下文</h3>
+      <p style="margin-bottom:1.2vh">遍历语料库每个位置，用<strong class="bright">中心词</strong>预测<strong class="bright">窗口内的上下文词</strong>。</p>
+
+      <svg viewBox="0 0 420 130" style="width:100%;height:auto">
+        <!-- context window box -->
+        <rect x="10" y="20" width="400" height="70" rx="10" fill="rgba(34,211,238,0.06)" stroke="rgba(34,211,238,0.35)" stroke-dasharray="4,3"/>
+        <text x="210" y="14" font-family="Inter" font-size="10" fill="#22d3ee" text-anchor="middle" font-weight="700" letter-spacing="2">CONTEXT WINDOW (m=2)</text>
+        <!-- words -->
+        <g font-family="Inter" font-size="13" font-weight="600" text-anchor="middle">
+          <text x="65" y="62" fill="#9aa0b4">government</text>
+          <text x="155" y="62" fill="#9aa0b4">problems</text>
+          <text x="245" y="62" fill="#fff" font-weight="800">banking</text>
+          <text x="335" y="62" fill="#9aa0b4">crises</text>
+          <text x="405" y="62" fill="#9aa0b4" font-size="11">...</text>
+        </g>
+        <!-- center marker -->
+        <line x1="245" y1="70" x2="245" y2="92" stroke="#fbbf24" stroke-width="2"/>
+        <text x="245" y="108" font-family="JetBrains Mono" font-size="10" fill="#fbbf24" text-anchor="middle" font-weight="700">center c</text>
+        <line x1="65" y1="70" x2="65" y2="88" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2,2"/>
+        <line x1="155" y1="70" x2="155" y2="88" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2,2"/>
+        <line x1="335" y1="70" x2="335" y2="88" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2,2"/>
+        <text x="110" y="125" font-family="JetBrains Mono" font-size="9" fill="#22d3ee" text-anchor="middle">o</text>
+        <text x="335" y="125" font-family="JetBrains Mono" font-size="9" fill="#22d3ee" text-anchor="middle">o</text>
+      </svg>
+      <p class="muted" style="font-size:.82vw">目标：让真实共现的 (c, o) 概率高，让无关词（如 "skillet"）概率低。</p>
+    </div>
+
+    <!-- RIGHT: dense vector + Word2Vec badge -->
+    <div class="col">
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(168,85,247,.18);color:var(--purple)">▦</span>Dense Vector · 词的密集向量</h3>
+        <p style="margin-bottom:1vh">每个词 = 一个 <strong class="bright">低维实数向量</strong>（典型 100 / 300 / 1000+ 维）</p>
+        <div class="math" style="font-size:1vw;text-align:left;padding:1vh 1vw">
+          <span style="color:var(--pink)">banking</span> = [0.34, 0.21, <span class="muted">-0.18</span>, 0.42, ..., -0.07]
+          <span class="muted" style="font-size:.75vw">∈ ℝ<sup>300</sup></span><br>
+          <span style="color:var(--cyan)">monetary</span> = [0.31, 0.19, <span class="muted">-0.12</span>, 0.39, ..., -0.05]
+        </div>
+        <p class="muted" style="font-size:.82vw;margin-top:.6vh">语义相关 → 向量接近 → <strong class="grad-cyan">点积大</strong></p>
+      </div>
+      <div class="card" style="background:linear-gradient(135deg,rgba(236,72,153,.10),rgba(168,85,247,.10))">
+        <h3><span class="ico" style="background:rgba(236,72,153,.2);color:var(--pink)">★</span>Word2Vec · 2013</h3>
+        <p>
+          <strong class="bright">Mikolov et al. @ Google</strong> 提出。<br>
+          <span class="grad-purple" style="font-weight:700">简单 · 极快 · 风靡一时</span> —— 让"学习词向量"真正可用。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<!-- SLIDE 6 : 词向量的直觉                                        -->
+<!-- ============================================================ -->
+<section class="slide" data-slide="6">
+  <div class="topbar reveal">
+    <div class="brand"><span class="dot"></span><span>Word Vectors in Action</span></div>
+    <div class="chapter">06 / 08</div>
+  </div>
+
+  <div class="section-head reveal">
+    <span class="num">05</span>
+    <h2>学到的向量<span class="grad-cyan">长什么样</span>？</h2>
+    <span class="kicker">— t-SNE 降维可视化</span>
+  </div>
+
+  <div class="grid-2 reveal" style="transition-delay:.2s;flex:1;min-height:0">
+    <!-- LEFT: scatter -->
+    <div class="card" style="display:flex;flex-direction:column">
+      <h3><span class="ico" style="background:rgba(34,211,238,.18);color:var(--cyan)">⋯</span>相似词自动聚类</h3>
+      <svg class="scatter-svg" viewBox="0 0 400 280" preserveAspectRatio="xMidYMid meet" style="flex:1">
+        <!-- cluster A: countries (top left) -->
+        <ellipse cx="90" cy="60" rx="75" ry="42" fill="rgba(34,211,238,0.07)" stroke="rgba(34,211,238,0.25)" stroke-dasharray="3,3"/>
+        <text x="90" y="20" class="cluster-label" fill="#22d3ee" text-anchor="middle">COUNTRIES</text>
+        <text x="50" y="55">Taiwan</text>
+        <text x="95" y="50">China</text>
+        <text x="135" y="58">Japan</text>
+        <text x="60" y="78">Korea</text>
+        <text x="110" y="80">France</text>
+
+        <!-- cluster B: nationalities (bottom left) -->
+        <ellipse cx="90" cy="200" rx="78" ry="40" fill="rgba(168,85,247,0.07)" stroke="rgba(168,85,247,0.25)" stroke-dasharray="3,3"/>
+        <text x="90" y="170" class="cluster-label" fill="#a855f7" text-anchor="middle">NATIONALITIES</text>
+        <text x="45" y="200">British</text>
+        <text x="90" y="195">American</text>
+        <text x="140" y="205">Australian</text>
+        <text x="65" y="222">European</text>
+        <text x="115" y="222">Indian</text>
+
+        <!-- cluster C: verbs (right) -->
+        <ellipse cx="290" cy="130" rx="90" ry="70" fill="rgba(236,72,153,0.07)" stroke="rgba(236,72,153,0.25)" stroke-dasharray="3,3"/>
+        <text x="290" y="65" class="cluster-label" fill="#ec4899" text-anchor="middle">VERBS · 思维/言语</text>
+        <text x="245" y="110">say</text>
+        <text x="280" y="100">tell</text>
+        <text x="320" y="115">think</text>
+        <text x="270" y="135">expect</text>
+        <text x="320" y="140">believe</text>
+        <text x="300" y="160">come</text>
+        <text x="345" y="160">go</text>
+        <text x="250" y="170">is / am</text>
+        <text x="305" y="185">have</text>
+
+        <!-- connecting faint lines -->
+        <line x1="90" y1="102" x2="90" y2="160" stroke="rgba(255,255,255,0.1)" stroke-dasharray="2,3"/>
+      </svg>
+      <p class="muted" style="font-size:.78vw;margin-top:.4vh;text-align:center">词义相近的词在高维空间中彼此靠近</p>
+    </div>
+
+    <!-- RIGHT: analogies + senses -->
+    <div class="col">
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(251,191,36,.18);color:var(--amber)">±</span>词类比 · Vector Arithmetic</h3>
+        <div class="math" style="font-size:1.15vw;margin:.6vh 0">
+          <span class="em">king</span> <span class="op">−</span> <span style="color:var(--cyan)">man</span> <span class="op">+</span> <span style="color:var(--cyan)">woman</span> <span class="op">≈</span> <span class="em">queen</span>
+        </div>
+        <p class="muted" style="font-size:.82vw">方向编码语义关系（性别、时态、地理……）</p>
+      </div>
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(52,211,153,.18);color:var(--green)">★</span>一词多义 · 同时被捕获</h3>
+        <p style="margin-bottom:.6vh">每个词型 (word type) 学<strong class="bright">一个</strong>向量，相当于多义的平均。</p>
+        <div class="row" style="gap:.6vw">
+          <div style="flex:1;text-align:center;padding:.6vh;background:rgba(0,0,0,.25);border-radius:.5vw">
+            <div style="font-size:1.4vw">⭐</div>
+            <div class="inline-code" style="font-size:.85vw">star</div>
+          </div>
+          <div style="font-size:1.2vw;color:var(--cyan);align-self:center">↔</div>
+          <div style="flex:1.6;padding:.6vh;background:rgba(0,0,0,.25);border-radius:.5vw">
+            <div style="font-size:.8vw;color:var(--amber);font-weight:600">celebrity</div>
+            <div style="font-size:.8vw;color:var(--purple);font-weight:600">nebula 🌌</div>
+            <div class="muted" style="font-size:.7vw;margin-top:.2vh">两个意义同时靠近</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<!-- SLIDE 7 : 目标函数与优化                                      -->
+<!-- ============================================================ -->
+<section class="slide" data-slide="7">
+  <div class="topbar reveal">
+    <div class="brand"><span class="dot"></span><span>Objective & Optimization</span></div>
+    <div class="chapter">07 / 08</div>
+  </div>
+
+  <div class="section-head reveal">
+    <span class="num">06</span>
+    <h2>把"学词向量"<span class="grad-amber">变成一个优化问题</span></h2>
+  </div>
+
+  <div class="grid-2 reveal" style="transition-delay:.2s">
+    <!-- LEFT: objective -->
+    <div class="col">
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(251,191,36,.18);color:var(--amber)">J(θ)</span>目标函数 · 平均负对数似然</h3>
+        <div class="math" style="margin:.8vh 0;font-size:1.05vw">
+          <span class="em">J(θ)</span> <span class="op">=</span> <span class="op">−</span><span class="muted">(1/T)</span> <span class="op">Σ</span><span class="sub">t=1..T</span> <span class="op">Σ</span><span class="sub">−m≤j≤m</span> <span class="op">log</span> P(<span class="var">w</span><span class="sub">t+j</span> | <span class="var">w</span><span class="sub">t</span>)
+        </div>
+        <ul style="list-style:none;font-size:.85vw;line-height:1.7;margin-top:.4vh;color:var(--text-dim)">
+          <li>▸ 加 <span class="inline-code">−</span> 号：最大化 → <strong class="bright">最小化</strong>（gradient descent）</li>
+          <li>▸ 取 <span class="inline-code">log</span>：大乘积 → 求和，便于计算</li>
+          <li>▸ 除以 <span class="inline-code">T</span>：变成"每个位置的平均"</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(168,85,247,.18);color:var(--purple)">σ</span>用 Softmax 计算概率</h3>
+        <div class="math" style="font-size:1.05vw;margin:.6vh 0">
+          P(<span class="var">o</span>|<span class="var">c</span>) <span class="op">=</span> <span class="em">exp</span>(<span class="var">u</span><span class="sub">o</span><span class="op">·</span><span class="var">v</span><span class="sub">c</span>) <span class="op">/</span> <span class="op">Σ</span><span class="sub">w∈V</span> <span class="em">exp</span>(<span class="var">u</span><span class="sub">w</span><span class="op">·</span><span class="var">v</span><span class="sub">c</span>)
+        </div>
+        <p class="muted" style="font-size:.82vw">点积 → exp (转正) → 归一化 → 概率分布（和为 1）。<strong class="bright">每个词有两套向量</strong>：作中心词 <span class="inline-code">v</span> 与作上下文词 <span class="inline-code">u</span>。</p>
+      </div>
+    </div>
+
+    <!-- RIGHT: softmax steps + gradient descent -->
+    <div class="col">
+      <div class="card">
+        <h3><span class="ico" style="background:rgba(34,211,238,.18);color:var(--cyan)">→</span>Softmax 三步走</h3>
+        <div class="step-flow" style="margin-top:.6vh">
+          <div class="step">
+            <div class="sn">STEP 1</div>
+            <div class="stitle">点积</div>
+            <div class="sdesc">u·v<br><span class="muted">实数 (可负)</span></div>
+          </div>
+          <div class="step-arrow">→</div>
+          <div class="step">
+            <div class="sn">STEP 2</div>
+            <div class="stitle">exp(·)</div>
+            <div class="sdesc">变正数<br><span class="muted">放大差异</span></div>
+          </div>
+          <div class="step-arrow">→</div>
+          <div class="step">
+            <div class="sn">STEP 3</div>
+            <div class="stitle">归一化</div>
+            <div class="sdesc">÷ 总和<br><span class="muted">∈ [0,1]</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="display:flex;gap:1.2vw;align-items:center">
+        <div style="flex:0 0 38%">
+          <svg viewBox="0 0 200 130" style="width:100%">
+            <defs>
+              <linearGradient id="curve" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#22d3ee"/>
+                <stop offset="100%" stop-color="#a855f7"/>
+              </linearGradient>
+            </defs>
+            <!-- loss curve -->
+            <path d="M 15 25 Q 60 110 100 105 Q 140 100 185 30" stroke="url(#curve)" stroke-width="2.5" fill="none"/>
+            <!-- axes -->
+            <line x1="15" y1="125" x2="190" y2="125" stroke="rgba(255,255,255,0.2)"/>
+            <line x1="15" y1="10" x2="15" y2="125" stroke="rgba(255,255,255,0.2)"/>
+            <text x="100" y="120" font-family="JetBrains Mono" font-size="8" fill="#9aa0b4" text-anchor="middle">θ (parameters)</text>
+            <!-- moving ball -->
+            <circle cx="55" cy="78" r="6" fill="#fbbf24">
+              <animate attributeName="cx" values="55;75;100" dur="2s" repeatCount="indefinite"/>
+              <animate attributeName="cy" values="78;92;105" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <text x="100" y="22" font-family="Inter" font-size="9" fill="#fbbf24" font-weight="700">min loss</text>
+          </svg>
+        </div>
+        <div style="flex:1">
+          <h3 style="font-size:1.05vw;margin-bottom:.4vh"><span class="ico" style="background:rgba(251,191,36,.18);color:var(--amber);width:1.8vw;height:1.8vw;font-size:.85vw">▼</span>Gradient Descent</h3>
+          <p style="font-size:.82vw">沿梯度方向逐步更新参数，"滚向"损失最低点。</p>
+          <div class="kbox" style="margin-top:.6vh;padding:.8vh .8vw">
+            <code style="font-size:.78vw;color:var(--green)">∂J/∂v<sub>c</sub> = u<sub>o</sub> − Σ P(x|c)·u<sub>x</sub></code>
+            <p class="muted" style="font-size:.72vw;margin-top:.3vh">观察值 − 期望值（observed − expected）</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footnote reveal" style="transition-delay:.6s">
+    神奇之处：从<strong class="bright">随机向量 + 一堆文本</strong>出发，最小化目标函数 —— 竟然能学出有意义的词义。这就是深度学习的"魔法"。
+  </div>
+</section>
+
+
+<!-- ============================================================ -->
+<!-- SLIDE 8 : 应用与课程作业                                       -->
+<!-- ============================================================ -->
+<section class="slide" data-slide="8">
+  <div class="topbar reveal">
+    <div class="brand"><span class="dot"></span><span>Applications & Coursework</span></div>
+    <div class="chapter">08 / 08</div>
+  </div>
+
+  <div class="section-head reveal">
+    <span class="num">07</span>
+    <h2>从 Word2Vec 到 <span class="grad-purple">Foundation Models</span></h2>
+  </div>
+
+  <div class="grid-2 reveal" style="transition-delay:.2s;margin-bottom:1.6vh">
+    <div class="card glow">
+      <h3><span class="ico" style="background:rgba(34,211,238,.18);color:var(--cyan)">🌍</span>NLP 应用版图</h3>
+      <div class="timeline" style="margin:1vh 0 0">
+        <div class="tl-node">
+          <div class="pt"></div>
+          <div class="yr" style="font-size:.95vw">2014-16</div>
+          <div class="ev">神经机器翻译<br>(Google 上线)</div>
+        </div>
+        <div class="tl-node">
+          <div class="pt p2"></div>
+          <div class="yr" style="font-size:.95vw">~2018</div>
+          <div class="ev">问答式搜索<br>(retrieval+reader)</div>
+        </div>
+        <div class="tl-node">
+          <div class="pt p3"></div>
+          <div class="yr" style="font-size:.95vw">2019+</div>
+          <div class="ev">GPT-2 / ChatGPT<br>多模态生成</div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:.8vw;margin-top:1vh">Stanford 提出 <strong class="bright">Foundation Models</strong>：同一技术横跨文本、图像、声音、生物信号。</p>
+    </div>
+
+    <div class="card">
+      <h3><span class="ico" style="background:rgba(168,85,247,.18);color:var(--purple)">%</span>成绩构成</h3>
+      <div style="margin-top:1vh">
+        <div class="grade-row">
+          <div class="grade-label">4 个 Assignment</div>
+          <div class="grade-bar-bg"><div class="grade-bar g1" data-w="48" style="background:linear-gradient(90deg,#22d3ee,#3b82f6)"></div></div>
+          <div class="grade-pct">~48%</div>
+        </div>
+        <div class="grade-row">
+          <div class="grade-label">Final Project</div>
+          <div class="grade-bar-bg"><div class="grade-bar g2" data-w="45" style="background:linear-gradient(90deg,#a855f7,#ec4899)"></div></div>
+          <div class="grade-pct">~45%</div>
+        </div>
+        <div class="grade-row">
+          <div class="grade-label">Participation</div>
+          <div class="grade-bar-bg"><div class="grade-bar g3" data-w="7" style="background:linear-gradient(90deg,#fbbf24,#f97316)"></div></div>
+          <div class="grade-pct">~7%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card reveal" style="transition-delay:.4s">
+    <h3 style="margin-bottom:.8vh"><span class="ico" style="background:rgba(52,211,153,.18);color:var(--green)">▶</span>4 个 Assignment · 难度递进</h3>
+    <div class="pipeline" style="margin-top:.4vh">
+      <div class="node">
+        <div class="circle c1" style="width:3vw;height:3vw;font-size:.85vw">A1</div>
+        <div class="lbl" style="font-size:.75vw">Warm-up<br>Jupyter Notebook</div>
+      </div>
+      <div class="arrow-x">→</div>
+      <div class="node">
+        <div class="circle c3" style="width:3vw;height:3vw;font-size:.85vw">A2</div>
+        <div class="lbl" style="font-size:.75vw">数学推导 + PyTorch<br>依存解析器</div>
+      </div>
+      <div class="arrow-x">→</div>
+      <div class="node">
+        <div class="circle c4" style="width:3vw;height:3vw;font-size:.85vw">A3</div>
+        <div class="lbl" style="font-size:.75vw">GPU + Google Cloud<br>机器翻译</div>
+      </div>
+      <div class="arrow-x">→</div>
+      <div class="node">
+        <div class="circle c5" style="width:3vw;height:3vw;font-size:.85vw">A4</div>
+        <div class="lbl" style="font-size:.75vw">Transformers<br>信息抽取</div>
+      </div>
+      <div class="arrow-x" style="color:var(--pink)">⇒</div>
+      <div class="node">
+        <div class="circle c6" style="width:3vw;height:3vw;font-size:.8vw;background:rgba(236,72,153,.18);border-color:var(--pink)">FP</div>
+        <div class="lbl" style="font-size:.75vw">Final Project<br>(default / custom)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footnote reveal" style="transition-delay:.6s">
+    <strong style="color:var(--cyan)">AI 工具政策：</strong>可用作编程助手，但作业必须独立完成——"Hey ChatGPT, 帮我答第 3 题" 不在学习之内。6 个 late day · group 仅限 final project。
+  </div>
+</section>
+
+</div>
+
+<div id="page-num"><span class="cur">1</span> / 8</div>
+<div id="hint">← → / scroll / click · 翻页</div>
+<div class="nav-zone left" id="navLeft"></div>
+<div class="nav-zone right" id="navRight"></div>
+
+<script>
+/* ===================== COVER FLOATING DOTS ===================== */
+(function(){
+  const c = document.getElementById('dotsContainer');
+  const N = 28;
+  for(let i=0;i<N;i++){
+    const d = document.createElement('div');
+    d.className = 'float-dot';
+    const size = Math.random()*6 + 2;
+    d.style.width = size+'px';
+    d.style.height = size+'px';
+    d.style.left = (Math.random()*100)+'vw';
+    const dur = Math.random()*16 + 14;
+    d.style.animationDuration = dur+'s';
+    d.style.animationDelay = (-Math.random()*dur)+'s';
+    d.style.opacity = (Math.random()*0.5 + 0.2);
+    c.appendChild(d);
+  }
+})();
+
+/* ===================== DECK CONTROLLER ===================== */
+(function(){
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let cur = 0;
+  const progressFill = document.getElementById('progress-fill');
+  const pageNum = document.getElementById('page-num').querySelector('.cur');
+  const gradeBars = document.querySelectorAll('.grade-bar');
+
+  function triggerGrades(slide){
+    // animate grade bars whenever slide 8 becomes active
+    slide.querySelectorAll('.grade-bar').forEach((b,idx)=>{
+      b.style.width = '0';
+      setTimeout(()=>{ b.style.width = b.dataset.w + '%'; }, 700 + idx*250);
+    });
+  }
+
+  function show(i){
+    if(i<0||i>=total) return;
+    const prev = slides[cur];
+    const next = slides[i];
+    // reset reveals on outgoing
+    prev.querySelectorAll('.reveal').forEach(el=>el.classList.remove('show'));
+    cur = i;
+    // activate
+    slides.forEach((s,idx)=>s.classList.toggle('active', idx===cur));
+    // stagger reveal on incoming
+    const items = next.querySelectorAll('.reveal');
+    items.forEach((el,k)=>{
+      // use existing transition-delay if set, else fallback
+      void el.offsetWidth;
+      setTimeout(()=>el.classList.add('show'), 120 + k*150);
+    });
+    // progress + page num
+    progressFill.style.width = ((cur)/(total-1))*100 + '%';
+    pageNum.textContent = cur+1;
+    // grade bars
+    if(next.dataset.slide === '8') triggerGrades(next);
+  }
+
+  function next(){ show(Math.min(cur+1,total-1)); }
+  function prev(){ show(Math.max(cur-1,0)); }
+
+  // initial reveal of first slide
+  requestAnimationFrame(()=>{
+    const items = slides[0].querySelectorAll('.reveal');
+    items.forEach((el,k)=>{
+      setTimeout(()=>el.classList.add('show'), 200 + k*150);
+    });
+    progressFill.style.width = '0%';
+  });
+
+  /* keyboard */
+  document.addEventListener('keydown', e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown') { e.preventDefault(); next(); }
+    else if(e.key==='ArrowLeft'||e.key==='PageUp') { e.preventDefault(); prev(); }
+    else if(e.key==='Home') show(0);
+    else if(e.key==='End') show(total-1);
+  });
+
+  /* click zones */
+  document.getElementById('navLeft').addEventListener('click', prev);
+  document.getElementById('navRight').addEventListener('click', next);
+
+  /* scroll (debounced) */
+  let scrollLock = false;
+  window.addEventListener('wheel', e=>{
+    if(scrollLock) return;
+    if(Math.abs(e.deltaY)<25 && Math.abs(e.deltaX)<25) return;
+    scrollLock = true;
+    if(e.deltaY>0||e.deltaX>0) next(); else prev();
+    setTimeout(()=>scrollLock=false, 750);
+  }, {passive:true});
+
+  /* touch swipe */
+  let touchX = null;
+  window.addEventListener('touchstart', e=>{ touchX = e.changedTouches[0].clientX; }, {passive:true});
+  window.addEventListener('touchend', e=>{
+    if(touchX===null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    if(Math.abs(dx)>50){ dx<0 ? next() : prev(); }
+    touchX = null;
+  }, {passive:true});
+})();
+</script>
+</body>
+</html>
