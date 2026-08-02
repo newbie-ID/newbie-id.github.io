@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM 架构与超参数综述 - 翻页演示</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-0: #07080f;
+    --bg-1: #0d1117;
+    --bg-2: #131a2a;
+    --blue: #4f8cff;
+    --purple: #a855f7;
+    --orange: #ff8a3d;
+    --cyan: #22d3ee;
+    --green: #34d399;
+    --red: #f87171;
+    --text: #e6edf3;
+    --text-dim: #8b98a9;
+    --glow-blue: 0 0 24px rgba(79,140,255,0.55);
+    --glow-purple: 0 0 24px rgba(168,85,247,0.55);
+    --glow-orange: 0 0 24px rgba(255,138,61,0.55);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: var(--bg-0);
+    font-family: 'Noto Sans SC', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* ===== Stage / 16:9 ===== */
+  .stage {
+    position: relative;
+    width: min(100vw, calc(100vh * 1.7778));
+    height: min(56.25vw, 100vh);
+    background: radial-gradient(ellipse at 20% 0%, #1a2240 0%, var(--bg-1) 45%, var(--bg-0) 100%);
+    overflow: hidden;
+    box-shadow: 0 0 80px rgba(0,0,0,0.8);
+  }
+  /* decorative grid */
+  .stage::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(79,140,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,140,255,0.05) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    padding: 5% 7%;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  .slide.active { display: flex; opacity: 1; }
+
+  /* ===== Animations ===== */
+  .anim { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+  .slide.active .anim {
+    animation: rise 0.7s cubic-bezier(.2,.7,.2,1) forwards;
+  }
+  @keyframes rise {
+    to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+
+  /* ===== Typography ===== */
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95rem;
+    letter-spacing: 0.3em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 1.2vh;
+  }
+  h1 {
+    font-size: clamp(2rem, 4.6vw, 4.4rem);
+    font-weight: 900;
+    line-height: 1.08;
+    background: linear-gradient(120deg, #fff 0%, var(--blue) 40%, var(--purple) 75%, var(--orange) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1.6vh;
+  }
+  h2 {
+    font-size: clamp(1.6rem, 3vw, 2.8rem);
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 2.2vh;
+  }
+  h2 .accent { color: var(--orange); }
+  .lead {
+    font-size: clamp(1rem, 1.5vw, 1.4rem);
+    color: var(--text-dim);
+    line-height: 1.6;
+    max-width: 80%;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .pill {
+    display: inline-block;
+    padding: 0.3em 0.9em;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    border: 1px solid;
+    backdrop-filter: blur(4px);
+  }
+  .pill.blue { color: var(--blue); border-color: rgba(79,140,255,0.5); background: rgba(79,140,255,0.08); }
+  .pill.purple { color: var(--purple); border-color: rgba(168,85,247,0.5); background: rgba(168,85,247,0.08); }
+  .pill.orange { color: var(--orange); border-color: rgba(255,138,61,0.5); background: rgba(255,138,61,0.08); }
+  .pill.green { color: var(--green); border-color: rgba(52,211,153,0.5); background: rgba(52,211,153,0.08); }
+
+  /* ===== Cover ===== */
+  .cover { justify-content: center; align-items: flex-start; }
+  .cover .meta {
+    margin-top: 3vh;
+    display: flex; gap: 1.2vw; flex-wrap: wrap;
+  }
+  .glow-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.5;
+  }
+  .glow-orb.b1 { width: 30vw; height: 30vw; background: var(--blue); top: -8vw; right: -6vw; }
+  .glow-orb.b2 { width: 26vw; height: 26vw; background: var(--purple); bottom: -8vw; left: -6vw; }
+
+  /* ===== Triangle (tradeoff) ===== */
+  .tri-wrap {
+    position: relative;
+    width: min(46vw, 46vh*1.4);
+    height: min(40vh, 30vw);
+    margin: 1vh auto;
+  }
+  .tri-node {
+    position: absolute;
+    text-align: center;
+    width: 11vw;
+    min-width: 120px;
+  }
+  .tri-node .ico {
+    font-size: 2.2rem;
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+  .tri-node .lbl { font-weight: 800; font-size: 1.15rem; }
+  .tri-node .sub { font-size: 0.8rem; color: var(--text-dim); }
+  .tri-node.top { top: 0; left: 50%; transform: translateX(-50%); }
+  .tri-node.bl { bottom: 0; left: 0; }
+  .tri-node.br { bottom: 0; right: 0; }
+  .tri-node.top .ico { color: var(--orange); }
+  .tri-node.bl .ico { color: var(--blue); }
+  .tri-node.br .ico { color: var(--purple); }
+
+  /* ===== Compare cards ===== */
+  .cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2vw; margin-top: 1vh; }
+  .cmp-card {
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    padding: 2.2vh 1.8vw;
+    background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+    position: relative;
+  }
+  .cmp-card.bad { border-color: rgba(248,113,113,0.4); }
+  .cmp-card.good { border-color: rgba(52,211,153,0.4); }
+  .cmp-card .tag { font-size: 0.85rem; font-weight: 700; margin-bottom: 0.8vh; letter-spacing: 0.05em; }
+  .cmp-card.bad .tag { color: var(--red); }
+  .cmp-card.good .tag { color: var(--green); }
+  .cmp-card h3 { font-size: 1.3rem; margin-bottom: 0.8vh; }
+  .cmp-card p { font-size: 0.98rem; color: var(--text-dim); line-height: 1.55; }
+  .cmp-card .hi { color: var(--text); font-weight: 700; }
+
+  /* ===== Stat row ===== */
+  .stat-row { display: flex; gap: 3vw; margin: 2vh 0; flex-wrap: wrap; }
+  .stat { text-align: left; }
+  .stat .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(2rem, 4vw, 3.6rem);
+    font-weight: 700;
+    line-height: 1;
+  }
+  .stat .num.blue { color: var(--blue); text-shadow: var(--glow-blue); }
+  .stat .num.orange { color: var(--orange); text-shadow: var(--glow-orange); }
+  .stat .cap { font-size: 0.9rem; color: var(--text-dim); margin-top: 0.4rem; }
+
+  /* ===== Flow ===== */
+  .flow { display: flex; align-items: center; gap: 0.8vw; flex-wrap: wrap; margin: 1.5vh 0; }
+  .flow .step {
+    padding: 0.7em 1.1em;
+    border: 1px solid rgba(79,140,255,0.4);
+    border-radius: 10px;
+    background: rgba(79,140,255,0.06);
+    font-size: 0.98rem;
+  }
+  .flow .step.hot { border-color: var(--orange); background: rgba(255,138,61,0.1); color: var(--orange); font-weight: 700; }
+  .flow .arr { color: var(--cyan); font-size: 1.3rem; }
+
+  /* ===== Table ===== */
+  .cheat {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 0.8vh;
+    margin-top: 1vh;
+  }
+  .cheat tr { transition: transform .2s; }
+  .cheat td {
+    padding: 1.3vh 1.4vw;
+    background: rgba(255,255,255,0.03);
+    border-top: 1px solid rgba(255,255,255,0.07);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    font-size: 1rem;
+  }
+  .cheat tr td:first-child { border-left: 1px solid rgba(255,255,255,0.07); border-radius: 10px 0 0 10px; font-weight: 700; color: var(--cyan); width: 32%; }
+  .cheat tr td:last-child { border-right: 1px solid rgba(255,255,255,0.07); border-radius: 0 10px 10px 0; color: var(--text-dim); }
+  .cheat .val { color: var(--orange); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+
+  /* ===== Stability cards ===== */
+  .stab-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6vw; margin-top: 1.5vh; }
+  .stab-card {
+    border: 1px solid rgba(168,85,247,0.35);
+    border-radius: 14px;
+    padding: 2vh 1.4vw;
+    background: linear-gradient(180deg, rgba(168,85,247,0.08), rgba(168,85,247,0.02));
+    text-align: center;
+  }
+  .stab-card .ico { font-size: 2rem; margin-bottom: 0.6vh; }
+  .stab-card h4 { font-size: 1.15rem; margin-bottom: 0.6vh; color: #fff; }
+  .stab-card p { font-size: 0.88rem; color: var(--text-dim); line-height: 1.5; }
+  .stab-card .where { font-size: 0.78rem; margin-top: 0.6vh; color: var(--cyan); font-family: 'JetBrains Mono', monospace; }
+
+  /* ===== Action box ===== */
+  .action {
+    margin-top: 1.5vh;
+    border: 1px solid rgba(255,138,61,0.4);
+    border-radius: 14px;
+    padding: 2vh 2vw;
+    background: linear-gradient(120deg, rgba(255,138,61,0.1), rgba(168,85,247,0.06));
+  }
+  .action h3 { color: var(--orange); font-size: 1.3rem; margin-bottom: 1vh; }
+  .action .recipe { display: flex; gap: 0.8vw; flex-wrap: wrap; }
+  .action .chip {
+    padding: 0.5em 0.9em; border-radius: 8px; font-size: 0.9rem; font-weight: 700;
+    border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.25);
+  }
+
+  /* ===== Nav ===== */
+  .progress {
+    position: absolute; left: 0; bottom: 0; height: 3px;
+    background: linear-gradient(90deg, var(--blue), var(--purple), var(--orange));
+    transition: width 0.4s ease;
+    z-index: 20;
+  }
+  .counter {
+    position: absolute; right: 2vw; bottom: 2vh;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem; color: var(--text-dim); z-index: 20;
+  }
+  .counter .cur { color: var(--orange); }
+  .nav-hint {
+    position: absolute; left: 2vw; bottom: 2vh;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem; color: var(--text-dim); opacity: 0.6; z-index: 20;
+  }
+  .clickzone { position: absolute; top: 0; bottom: 0; width: 18%; z-index: 5; cursor: pointer; }
+  .clickzone.left { left: 0; }
+  .clickzone.right { right: 0; }
+  .arrow {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    font-size: 2rem; color: var(--text-dim); opacity: 0; transition: opacity .2s;
+    z-index: 21; pointer-events: none;
+  }
+  .stage:hover .arrow { opacity: 0.5; }
+  .arrow.l { left: 1.2vw; }
+  .arrow.r { right: 1.2vw; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+
+  <!-- ===== Slide 1: Cover ===== -->
+  <section class="slide cover active">
+    <div class="glow-orb b1"></div>
+    <div class="glow-orb b2"></div>
+    <div class="eyebrow anim" style="animation-delay:0.1s">LLM Architecture · Survey Lecture</div>
+    <h1 class="anim" style="animation-delay:0.3s">关于架构与超参数<br>你不想知道的一切</h1>
+    <p class="lead anim" style="animation-delay:0.6s">
+      Everything You Didn't Want to Know About Architectures and Hyperparameters<br>
+      <span class="mono" style="color:var(--cyan)">方法</span>：通读所有现代 LLM 论文，看哪些选择"固定"、哪些"可变"
+    </p>
+    <div class="meta anim" style="animation-delay:0.9s">
+      <span class="pill blue">89 min</span>
+      <span class="pill purple">Stanford</span>
+      <span class="pill orange">Qwen · Gemma · LLaMA · T5</span>
+      <span class="pill green">8 页复习卡</span>
+    </div>
+  </section>
+
+  <!-- ===== Slide 2: Tradeoff Triangle ===== -->
+  <section class="slide">
+    <div class="eyebrow anim" style="animation-delay:0.1s">01 · 核心认知</div>
+    <h2 class="anim" style="animation-delay:0.25s">架构 = <span class="accent">三角权衡</span></h2>
+    <p class="lead anim" style="animation-delay:0.45s">架构很难先验推理。每个选择都在三方拉扯，理解了这张图就理解了"为什么大家趋同"。</p>
+    <div class="tri-wrap anim" style="animation-delay:0.65s">
+      <div class="tri-node top">
+        <span class="ico">●</span>
+        <div class="lbl">表达能力</div>
+        <div class="sub">泛化 · 深度</div>
+      </div>
+      <div class="tri-node bl">
+        <span class="ico">●</span>
+        <div class="lbl">系统效率</div>
+        <div class="sub">GPU 利用 · 算术强度</div>
+      </div>
+      <div class="tri-node br">
+        <span class="ico">●</span>
+        <div class="lbl">训练稳定性</div>
+        <div class="sub">不崩 · 不爆</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Slide 3: Layer Norm ===== -->
+  <section class="slide">
+    <div class="eyebrow anim" style="animation-delay:0.1s">02 · 架构组件</div>
+    <h2 class="anim" style="animation-delay:0.25s">Layer Norm：<span class="accent">唯一公认原版没做对的</span></h2>
+    <div class="cmp-grid">
+      <div class="cmp-card bad anim" style="animation-delay:0.45s">
+        <div class="tag">✕ POST-NORM（原版）</div>
+        <h3>归一化在残差流内</h3>
+        <p>随深度增加 → <span class="hi">梯度衰减/尖峰</span>，需 warmup。<br>反例：<span class="mono">OPT-350M</span></p>
+      </div>
+      <div class="cmp-card good anim" style="animation-delay:0.6s">
+        <div class="tag">✓ PRE-NORM（现代标配）</div>
+        <h3>归一化在残差流外</h3>
+        <p>残差流"<span class="hi">干净</span>"，梯度直通传播，更稳、可去 warmup。<br>变体：Grok/Gemma2/Olmo2 双重 norm</p>
+      </div>
+    </div>
+    <p class="lead anim" style="animation-delay:0.8s; margin-top:2vh">
+      <span style="color:var(--orange);font-weight:700">黄金法则</span>：一有稳定性问题 → 到处加 Layer Norm
+    </p>
+  </section>
+
+  <!-- ===== Slide 4: RMSNorm ===== -->
+  <section class="slide">
+    <div class="eyebrow anim" style="animation-delay:0.1s">03 · 系统协同设计</div>
+    <h2 class="anim" style="animation-delay:0.25s">RMSNorm + 去偏置：<span class="accent">免费系统胜利</span></h2>
+    <p class="lead anim" style="animation-delay:0.45s">
+      <span class="mono">RMSNorm</span> 不减均值、不加偏置，表达力几乎无损但更快。关键洞察：<span style="color:var(--orange)">FLOPs ≠ 运行时间</span>。
+    </p>
+    <div class="stat-row anim" style="animation-delay:0.65s">
+      <div class="stat">
+        <div class="num blue">0.17%</div>
+        <div class="cap">LayerNorm 占总 FLOPs</div>
+      </div>
+      <div class="stat">
+        <div class="num orange">25%</div>
+        <div class="cap">却可能占运行时间（内存搬运瓶颈）</div>
+      </div>
+      <div class="stat">
+        <div class="num blue" style="color:var(--green);text-shadow:0 0 24px rgba(52,211,153,0.5)">0 bias</div>
+        <div class="cap">线性层偏置全部移除</div>
+      </div>
+    </div>
+    <p class="lead anim" style="animation-delay:0.85s; font-size:1rem">
+      算术强度 = 计算量 / 内存搬运量。移除"小而吃内存"的操作 = 免费提速。
+    </p>
+  </section>
+
+  <!-- ===== Slide 5: GLU + RoPE ===== -->
+  <section class="slide">
+    <div class="eyebrow anim" style="animation-delay:0.1s">04 · 激活 & 位置</div>
+    <h2 class="anim" style="animation-delay:0.25s">GLU 门控 + RoPE 旋转 = <span class="accent">现代标配</span></h2>
+    <p class="lead anim" style="animation-delay:0.4s" style="margin-bottom:1vh"><span style="color:var(--purple);font-weight:700">门控线性单元（GLU）</span>：在激活输出上再乘一个门控矩阵 V，"唾手可得的提升"。</p>
+    <div class="flow anim" style="animation-delay:0.55s">
+      <span class="step">X</span><span class="arr">→</span>
+      <span class="step">W₁ · ReLU</span><span class="arr">×</span>
+      <span class="step hot">X·V（门控）</span><span class="arr">→</span>
+      <span class="step">W₂ 下投影</span>
+    </div>
+    <p class="lead anim" style="animation-delay:0.7s; font-size:0.95rem; margin-top:0.6vh">
+      <span class="mono" style="color:var(--cyan)">SwiGLU</span>(LLaMA/PaLM) · <span class="mono" style="color:var(--cyan)">GeGLU</span>(Google) · 配 GLU 时前馈维 ×2/3 保参数量
+    </p>
+    <div style="margin-top:2.2vh" class="anim" style="animation-delay:0.85s">
+      <p class="lead" style="font-size:1rem"><span style="color:var(--orange);font-weight:700">RoPE</span>（2024 后主导）：按位置旋转 Q/K，内积只依赖相对位置、无交叉项。高维切成 2D 对分别旋转。</p>
+      <div class="flow" style="margin-top:1vh">
+        <span class="step">正弦余弦</span><span class="arr">→</span>
+        <span class="step">绝对</span><span class="arr">→</span>
+        <span class="step">相对(T5)</span><span class="arr">→</span>
+        <span class="step hot">RoPE</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Slide 6: Hyperparameter Cheatsheet ===== -->
+  <section class="slide">
+    <div class="eyebrow anim" style="animation-delay:0.1s">05 · 超参数</div>
+    <h2 class="anim" style="animation-delay:0.25s">超参数 Cheatsheet：<span class="accent">都很"宽容"</span></h2>
+    <table class="cheat">
+      <tr class="anim" style="animation-delay:0.45s">
+        <td>前馈比 FFN/D</td>
+        <td><span class="val">4×</span> · GLU ×2/3≈2.67 · LLaMA2≈3.5 · T5 64× 是异类。Kaplan：1~10 平坦盆地</td>
+      </tr>
+      <tr class="anim" style="animation-delay:0.58s">
+        <td>头数 × 头维</td>
+        <td><span class="val">head_dim × n_heads = D</span> · 不成文规则，很宽容</td>
+      </tr>
+      <tr class="anim" style="animation-delay:0.71s">
+        <td>深宽比 D / n_layers</td>
+        <td><span class="val">≈100</span> · 深→流水线并行难，宽→张量并行易。但真正决定性能的是 <span style="color:var(--orange)">FLOPs</span></td>
+      </tr>
+      <tr class="anim" style="animation-delay:0.84s">
+        <td>词表大小</td>
+        <td><span class="val">30k</span>（单语）/ <span class="val">100–200k</span>（多语言）· Google 偏大</td>
+      </tr>
+    </table>
+    <p class="lead anim" style="animation-delay:1s; margin-top:2vh; font-size:1rem">
+      <span style="color:var(--purple);font-weight:700">反直觉</span>：weight decay 其实是"优化干预"（与 LR 衰减协同），不是控过拟合；dropout 渐被弃。
+    </p>
+  </section>
+
+  <!-- ===== Slide 7: Stability ===== -->
+  <section class="slide">
+    <div class="eyebrow anim" style="animation-delay:0.1s">06 · 训练稳定性</div>
+    <h2 class="anim" style="animation-delay:0.25s">花了百万美元 <span class="accent">不能崩</span></h2>
+    <p class="lead anim" style="animation-delay:0.4s; margin-bottom:1vh">softmax 是危险区（指数+除法）。模型里有两个：输出端 + 注意力端。</p>
+    <div class="stab-grid">
+      <div class="stab-card anim" style="animation-delay:0.55s">
+        <div class="ico" style="color:var(--blue)">⚡</div>
+        <h4>Z-loss</h4>
+        <p>惩罚 (log Z)² 使归一化因子≈1</p>
+        <div class="where">输出端 · Devlin 2014</div>
+      </div>
+      <div class="stab-card anim" style="animation-delay:0.7s">
+        <div class="ico" style="color:var(--orange)">◎</div>
+        <h4>QK Norm</h4>
+        <p>Q·K^T 前对 Q、K 归一化，尺度≈1</p>
+        <div class="where">注意力端 · 不损性能</div>
+      </div>
+      <div class="stab-card anim" style="animation-delay:0.85s">
+        <div class="ico" style="color:var(--purple)">⏃</div>
+        <h4>Logit 软上限</h4>
+        <p>tanh 硬限 logits，安全但略降性能</p>
+        <div class="where">Gemma 系 · NVIDIA 消融</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Slide 8: Attention + Action ===== -->
+  <section class="slide">
+    <div class="eyebrow anim" style="animation-delay:0.1s">07 · 注意力干预 & 行动</div>
+    <h2 class="anim" style="animation-delay:0.25s">GQA + 滑动窗口：<span class="accent">当前最活跃方向</span></h2>
+    <div class="cmp-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="cmp-card bad anim" style="animation-delay:0.4s">
+        <div class="tag">MQA</div>
+        <h3 style="font-size:1.1rem">共享一组 K/V</h3>
+        <p style="font-size:0.85rem">省内存但损表达力</p>
+      </div>
+      <div class="cmp-card good anim" style="animation-delay:0.52s">
+        <div class="tag">GQA ★主流</div>
+        <h3 style="font-size:1.1rem">减 K/V 头保 Q 头</h3>
+        <p style="font-size:0.85rem">低成本 + 近全多头性能</p>
+      </div>
+      <div class="cmp-card anim" style="animation-delay:0.64s; border-color:rgba(255,138,61,0.4)">
+        <div class="tag" style="color:var(--orange)">滑动窗口</div>
+        <h3 style="font-size:1.1rem">全+局部交替</h3>
+        <p style="font-size:0.85rem">Command A / Llama4 / Qwen3.5</p>
+      </div>
+    </div>
+    <div class="action anim" style="animation-delay:0.85s">
+      <h3>★ 照抄 LLaMA 配方，把精力留给数据和规模</h3>
+      <div class="recipe">
+        <span class="chip" style="color:var(--blue)">pre-norm</span>
+        <span class="chip" style="color:var(--blue)">RMSNorm</span>
+        <span class="chip" style="color:var(--blue)">去偏置</span>
+        <span class="chip" style="color:var(--purple)">SwiGLU</span>
+        <span class="chip" style="color:var(--purple)">RoPE</span>
+        <span class="chip" style="color:var(--orange)">GQA</span>
+        <span class="chip" style="color:var(--orange)">4× 前馈</span>
+        <span class="chip" style="color:var(--green)">~100 深宽比</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Nav -->
+  <div class="clickzone left" onclick="nav(-1)"></div>
+  <div class="clickzone right" onclick="nav(1)"></div>
+  <div class="arrow l">‹</div>
+  <div class="arrow r">›</div>
+  <div class="progress" id="progress"></div>
+  <div class="counter"><span class="cur" id="cur">1</span> / <span id="total">8</span></div>
+  <div class="nav-hint">← → / 滚轮 / 点击两侧</div>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let idx = 0;
+  document.getElementById('total').textContent = total;
+
+  function show(n) {
+    idx = Math.max(0, Math.min(total - 1, n));
+    slides.forEach((s, i) => s.classList.toggle('active', i === idx));
+    document.getElementById('cur').textContent = idx + 1;
+    document.getElementById('progress').style.width = ((idx + 1) / total * 100) + '%';
+    // restart animations
+    const cur = slides[idx];
+    cur.querySelectorAll('.anim').forEach(el => {
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = '';
+    });
+  }
+  function nav(d) { show(idx + d); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); nav(1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); nav(-1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(total - 1);
+  });
+  let wheelLock = false;
+  document.getElementById('stage').addEventListener('wheel', e => {
+    if (wheelLock) return;
+    if (Math.abs(e.deltaY) < 24) return;
+    wheelLock = true;
+    nav(e.deltaY > 0 ? 1 : -1);
+    setTimeout(() => wheelLock = false, 600);
+  }, { passive: true });
+
+  show(0);
+</script>
+</body>
+</html>

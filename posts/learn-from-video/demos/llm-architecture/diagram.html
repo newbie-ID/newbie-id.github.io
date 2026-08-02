@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM 架构与超参数 · 概念图</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c14;
+    --blue: #4a9eff;
+    --purple: #a855f7;
+    --orange: #ff8a3d;
+    --green: #34d399;
+    --text: #e6edf3;
+    --dim: #8b98a9;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: radial-gradient(ellipse at 50% 40%, #141a2e 0%, var(--bg) 70%);
+    font-family: 'Noto Sans SC', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    padding: 24px;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .header h1 {
+    font-size: clamp(1.4rem, 3vw, 2.2rem);
+    font-weight: 900;
+    background: linear-gradient(120deg, var(--blue), var(--purple), var(--orange));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header p { color: var(--dim); font-size: 0.9rem; margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+  .map {
+    position: relative;
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    height: 78vh;
+    min-height: 560px;
+  }
+  svg.links {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  /* flowing dash on connectors */
+  .link {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    opacity: 0;
+    stroke-dasharray: 8 6;
+    animation: drawLink 1s ease forwards, flow 1.2s linear infinite;
+  }
+  @keyframes drawLink {
+    from { opacity: 0; stroke-dashoffset: 400; }
+    to { opacity: 0.55; stroke-dashoffset: 0; }
+  }
+  @keyframes flow { to { stroke-dashoffset: -28; } }
+  .link.blue { stroke: var(--blue); filter: drop-shadow(0 0 4px rgba(74,158,255,0.6)); }
+  .link.purple { stroke: var(--purple); filter: drop-shadow(0 0 4px rgba(168,85,247,0.6)); }
+  .link.orange { stroke: var(--orange); filter: drop-shadow(0 0 4px rgba(255,138,61,0.6)); }
+  .link.green { stroke: var(--green); filter: drop-shadow(0 0 4px rgba(52,211,153,0.6)); }
+
+  /* center node */
+  .center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    z-index: 5;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    background: radial-gradient(circle at 30% 30%, #2a3358, #0f1424);
+    border: 2px solid rgba(168,85,247,0.6);
+    box-shadow: 0 0 40px rgba(168,85,247,0.4), inset 0 0 30px rgba(74,158,255,0.15);
+    animation: pop 0.7s cubic-bezier(.2,.8,.2,1.2) 0.1s forwards, pulse 3s ease-in-out 1s infinite;
+  }
+  @keyframes pop { to { transform: translate(-50%, -50%) scale(1); } }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 40px rgba(168,85,247,0.4), inset 0 0 30px rgba(74,158,255,0.15); }
+    50% { box-shadow: 0 0 60px rgba(168,85,247,0.65), inset 0 0 40px rgba(74,158,255,0.25); }
+  }
+  .center .ctitle { font-size: 1.15rem; font-weight: 900; line-height: 1.2; }
+  .center .csub { font-size: 0.72rem; color: var(--dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+  .center .ceq { font-size: 0.68rem; color: var(--orange); margin-top: 8px; line-height: 1.3; }
+
+  /* branch panels */
+  .branch {
+    position: absolute;
+    z-index: 4;
+    width: 250px;
+    border-radius: 16px;
+    padding: 14px 16px;
+    background: linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015));
+    border: 1px solid;
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transform: translateY(14px);
+    transition: transform .25s, box-shadow .25s, border-color .25s;
+    cursor: default;
+  }
+  .branch.in { animation: fadeUp 0.6s ease forwards; }
+  @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+  .branch:hover { transform: translateY(-4px) scale(1.03); }
+  .branch .bhead {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 900; font-size: 1.02rem; margin-bottom: 10px;
+    padding-bottom: 8px; border-bottom: 1px dashed rgba(255,255,255,0.15);
+  }
+  .branch .bhead .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .leaf {
+    display: flex; align-items: flex-start; gap: 7px;
+    font-size: 0.82rem; line-height: 1.45; color: var(--dim);
+    margin-bottom: 6px; opacity: 0; transform: translateX(-6px);
+  }
+  .leaf.in { animation: leafIn 0.5s ease forwards; }
+  @keyframes leafIn { to { opacity: 1; transform: translateX(0); } }
+  .leaf .bullet { color: var(--text); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .leaf b { color: var(--text); font-weight: 700; }
+  .leaf .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--orange); }
+
+  /* positions */
+  .b1 { top: 4%; left: 2%; border-color: rgba(74,158,255,0.45); }
+  .b1:hover { box-shadow: 0 0 30px rgba(74,158,255,0.35); border-color: var(--blue); }
+  .b1 .dot { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+  .b1 .bullet { color: var(--blue); }
+
+  .b2 { top: 4%; right: 2%; border-color: rgba(168,85,247,0.45); }
+  .b2:hover { box-shadow: 0 0 30px rgba(168,85,247,0.35); border-color: var(--purple); }
+  .b2 .dot { background: var(--purple); box-shadow: 0 0 8px var(--purple); }
+  .b2 .bullet { color: var(--purple); }
+
+  .b3 { bottom: 4%; left: 2%; border-color: rgba(255,138,61,0.45); }
+  .b3:hover { box-shadow: 0 0 30px rgba(255,138,61,0.35); border-color: var(--orange); }
+  .b3 .dot { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .b3 .bullet { color: var(--orange); }
+
+  .b4 { bottom: 4%; right: 2%; border-color: rgba(52,211,153,0.45); }
+  .b4:hover { box-shadow: 0 0 30px rgba(52,211,153,0.35); border-color: var(--green); }
+  .b4 .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .b4 .bullet { color: var(--green); }
+
+  .legend {
+    text-align: center; margin-top: 10px; color: var(--dim);
+    font-size: 0.78rem; font-family: 'JetBrains Mono', monospace;
+  }
+  .legend span { color: var(--orange); }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>现代 LLM 架构 · 知识概念图</h1>
+    <p>Everything You Didn't Want to Know About Architectures and Hyperparameters</p>
+  </div>
+
+  <div class="map" id="map">
+    <!-- SVG connectors (center → 4 branches). Coordinates in 0..1000 x 0..600 viewBox -->
+    <svg class="links" viewBox="0 0 1000 600" preserveAspectRatio="none">
+      <!-- center ~ (500,300); branch hubs ~ (165,110) (835,110) (165,490) (835,490) -->
+      <path class="link blue"   d="M 500 300 Q 320 230 175 125" style="animation-delay:0.5s"></path>
+      <path class="link purple" d="M 500 300 Q 680 230 825 125" style="animation-delay:0.6s"></path>
+      <path class="link orange" d="M 500 300 Q 320 370 175 475" style="animation-delay:0.7s"></path>
+      <path class="link green"  d="M 500 300 Q 680 370 825 475" style="animation-delay:0.8s"></path>
+    </svg>
+
+    <!-- center -->
+    <div class="center">
+      <div class="ctitle">现代 LLM 架构</div>
+      <div class="csub">survey of all models</div>
+      <div class="ceq">表达力 ↔ 系统效率 ↔ 稳定性</div>
+    </div>
+
+    <!-- Branch 1: 架构组件 -->
+    <div class="branch b1" id="b1">
+      <div class="bhead"><span class="dot"></span>架构组件 · Components</div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>Layer Norm 放置</b>：<span class="mono">pre-norm</span>（残差流外），原版 post-norm 没做对；遇不稳→到处加 norm</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>RMSNorm + 去偏置</b>：不减均值/不加 bias，算术强度高（0.17% FLOPs vs 25% 运行时间）</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>GLU 门控</b>：<span class="mono">SwiGLU</span>(LLaMA) / <span class="mono">GeGLU</span>(Google)，配 ×2/3 缩放</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>位置编码</b>：<span class="mono">RoPE</span> 旋转（2024 后主导），无绝对位置交叉项</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>并行 vs 串行</b>：串行主流，并行(PaLM)已过气（损失一半深度）</span></div>
+    </div>
+
+    <!-- Branch 2: 超参数 -->
+    <div class="branch b2" id="b2">
+      <div class="bhead"><span class="dot"></span>超参数 · Hyperparams</div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>前馈比 FFN/D</b>：<span class="mono">4×</span>（GLU≈2.67；T5 64× 异类）。Kaplan：1~10 平坦盆地</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>头数 × 头维 = D</b>：不成文规则，很宽容</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>深宽比 D/n_layers</b>：<span class="mono">≈100</span>；真正决定性能的是 FLOPs 而非比例</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>词表</b>：30k（单语）/ 100–200k（多语言）</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>正则化反直觉</b>：weight decay = 优化干预；dropout 渐弃</span></div>
+    </div>
+
+    <!-- Branch 3: 训练稳定性 -->
+    <div class="branch b3" id="b3">
+      <div class="bhead"><span class="dot"></span>训练稳定性 · Stability</div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>softmax 危险区</b>：指数 + 除法；输出端 + 注意力端各一个</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>Z-loss</b>（输出端）：惩罚 <span class="mono">(log Z)²</span>，Devlin 2014；Baichuan 首个开源</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>QK Norm</b>（注意力端）：Q·K^T 前归一化，尺度≈1，不损性能</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>Logit 软上限</b>（Gemma）：tanh 限 logits，安全但略降性能</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>为何重要</b>：训练中途崩溃无法恢复，浪费百万美元</span></div>
+    </div>
+
+    <!-- Branch 4: 注意力干预 -->
+    <div class="branch b4" id="b4">
+      <div class="bhead"><span class="dot"></span>注意力干预 · Attention</div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>KV cache</b>：自回归推理复用历史 K/V，但算术强度变差（N/D 项）</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>MQA</b>：所有头共享一组 K/V，省内存但损表达力</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>GQA ★主流</b>：减 K/V 头保 Q 头，低成本 + 近全多头性能</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>滑动窗口混合</b>：全+局部交替，Command A / Llama4 / Gemma4 / Olmo3</span></div>
+      <div class="leaf"><span class="bullet">▸</span><span><b>Qwen3.5</b>：门控 DeltaNet(SSM) + 每 4 层 1 全注意力</span></div>
+    </div>
+  </div>
+
+  <div class="legend">悬停分支高亮 · <span>当前最活跃方向 = 长上下文注意力混合架构</span></div>
+
+<script>
+  // Sequential reveal: branches then their leaves
+  const branches = ['b1','b2','b3','b4'];
+  branches.forEach((id, i) => {
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      el.classList.add('in');
+      el.querySelectorAll('.leaf').forEach((leaf, j) => {
+        setTimeout(() => leaf.classList.add('in'), 120 + j * 90);
+      });
+    }, 700 + i * 220);
+  });
+</script>
+</body>
+</html>

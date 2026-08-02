@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BERT 论文精读 - 概念图与思维导图</title>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Patrick+Hand&family=Zeyada&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/lucide-static@latest/font/lucide.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --paper-bg: #fdf6e3;
+    --paper-dark: #f5ecd3;
+    --paper-line: #e8e0cc;
+    --ink-black: #2c2c2c;
+    --ink-red: #c0392b;
+    --ink-blue: #2980b9;
+    --ink-green: #27ae60;
+    --ink-purple: #8e44ad;
+    --ink-orange: #e67e22;
+    --ink-teal: #00897b;
+    --highlight-yellow: rgba(255, 235, 59, 0.35);
+    --highlight-pink: rgba(255, 105, 180, 0.25);
+    --highlight-green: rgba(46, 204, 113, 0.2);
+    --highlight-orange: rgba(255, 152, 0, 0.2);
+    --highlight-blue: rgba(52, 152, 219, 0.2);
+    --tape: rgba(255, 255, 255, 0.45);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(135deg, #3d3d3d 0%, #2c3e50 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    font-family: 'Kalam', cursive;
+    overflow-x: hidden;
+    gap: 40px;
+  }
+
+  .section-title {
+    color: #ecf0f1;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .section-title h1 {
+    font-family: 'Zeyada', cursive;
+    font-size: 2.4rem;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .section-title h2 {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 1.6rem;
+    color: #bdc3c7;
+  }
+
+  .notebook {
+    position: relative;
+    background: var(--paper-bg);
+    background-image:
+      linear-gradient(90deg, transparent 79px, #e8d5b5 79px, #e8d5b5 81px, transparent 81px),
+      linear-gradient(var(--paper-line) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 2.4rem;
+    background-position: 0 0, 0 0;
+    border-radius: 4px;
+    box-shadow:
+      0 1px 2px rgba(0,0,0,0.15),
+      0 4px 8px rgba(0,0,0,0.12),
+      0 8px 16px rgba(0,0,0,0.1),
+      0 16px 32px rgba(0,0,0,0.08),
+      15px 25px 40px rgba(0,0,0,0.3);
+    padding: 3rem 2.5rem 3rem 6rem;
+    line-height: 2.4rem;
+    color: var(--ink-black);
+    transform: rotate(-0.2deg);
+    animation: paperFloat 8s ease-in-out infinite;
+    width: 100%;
+    max-width: 1100px;
+  }
+  @keyframes paperFloat {
+    0%, 100% { transform: rotate(-0.2deg) translateY(0); }
+    50% { transform: rotate(0deg) translateY(-4px); }
+  }
+
+  .notebook.delay-2 { animation-delay: -3s; transform: rotate(0.15deg); }
+
+  .spiral-holes {
+    position: absolute;
+    left: 20px;
+    top: 0;
+    bottom: 0;
+    width: 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    padding: 2rem 0;
+  }
+  .hole {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #d4c5a0;
+    box-shadow: inset 2px 2px 4px rgba(0,0,0,0.3), 1px 1px 2px rgba(255,255,255,0.5);
+  }
+
+  .tape {
+    position: absolute;
+    top: -12px;
+    height: 30px;
+    background: var(--tape);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  .tape-left { left: 40px; width: 120px; transform: rotate(-3deg); }
+  .tape-right { right: 60px; width: 100px; transform: rotate(2deg); }
+
+  .diagram-container {
+    position: relative;
+    margin: 20px 0;
+    padding: 30px 20px;
+    background: rgba(255, 255, 255, 0.5);
+    border: 2px dashed rgba(0,0,0,0.1);
+    border-radius: 12px;
+  }
+
+  .diagram-label {
+    position: absolute;
+    top: -14px;
+    left: 24px;
+    background: var(--ink-blue);
+    color: white;
+    padding: 3px 14px;
+    border-radius: 4px;
+    font-family: 'Patrick Hand', cursive;
+    font-size: 1rem;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  }
+
+  .diagram-label.green { background: var(--ink-green); }
+  .diagram-label.purple { background: var(--ink-purple); }
+  .diagram-label.orange { background: var(--ink-orange); }
+  .diagram-label.red { background: var(--ink-red); }
+
+  .mermaid {
+    display: flex;
+    justify-content: center;
+    font-family: 'Patrick Hand', cursive;
+  }
+  .mermaid svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 8px;
+    font-size: 0.95rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-color {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.15);
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--paper-line);
+  }
+  .page-header h2 {
+    font-family: 'Zeyada', cursive;
+    font-size: 1.9rem;
+    color: var(--ink-red);
+    letter-spacing: 1px;
+  }
+  .page-header .subtitle {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 1.1rem;
+    color: #7f8c8d;
+    margin-top: 4px;
+  }
+
+  .key-insight {
+    margin: 20px 0;
+    padding: 14px 18px;
+    border-left: 4px solid var(--ink-orange);
+    background: var(--highlight-orange);
+    border-radius: 0 8px 8px 0;
+    font-size: 1.05rem;
+    line-height: 1.6rem;
+  }
+  .key-insight strong {
+    color: var(--ink-orange);
+  }
+
+  .term-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 14px 0;
+    justify-content: center;
+  }
+  .term-tag {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border: 1.5px solid;
+  }
+  .tag-blue { background: var(--highlight-blue); border-color: var(--ink-blue); color: var(--ink-blue); }
+  .tag-green { background: var(--highlight-green); border-color: var(--ink-green); color: var(--ink-green); }
+  .tag-orange { background: var(--highlight-orange); border-color: var(--ink-orange); color: var(--ink-orange); }
+  .tag-purple { background: var(--highlight-pink); border-color: var(--ink-purple); color: var(--ink-purple); }
+  .tag-red { background: var(--highlight-pink); border-color: var(--ink-red); color: var(--ink-red); }
+
+  .navigation {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin: 10px 0 30px;
+    flex-wrap: wrap;
+  }
+  .nav-btn {
+    padding: 10px 24px;
+    background: rgba(255,255,255,0.1);
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 30px;
+    color: #ecf0f1;
+    font-family: 'Patrick Hand', cursive;
+    font-size: 1.1rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nav-btn:hover {
+    background: rgba(255,255,255,0.2);
+    transform: translateY(-2px);
+  }
+  .nav-btn i { font-size: 1.1rem; }
+
+  .footer-note {
+    text-align: center;
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--paper-line);
+  }
+
+  @media (max-width: 768px) {
+    .notebook { padding: 2rem 1.2rem 2rem 3.5rem; }
+    .spiral-holes { left: 10px; width: 30px; }
+    .hole { width: 10px; height: 10px; }
+    .section-title h1 { font-size: 1.8rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="section-title">
+  <h1>📘 BERT 论文精读</h1>
+  <h2>概念图 &amp; 思维导图 · Concept Maps &amp; Mind Maps</h2>
+</div>
+
+<div class="navigation">
+  <a class="nav-btn" href="#diagram1"><i class="icon-layers"></i> 架构对比图</a>
+  <a class="nav-btn" href="#diagram2"><i class="icon-cpu"></i> MLM 训练流程</a>
+  <a class="nav-btn" href="#diagram3"><i class="icon-git-merge"></i> NSP 训练流程</a>
+  <a class="nav-btn" href="#diagram4"><i class="icon-arrow-up-circle"></i> 微调适配流程</a>
+</div>
+
+<!-- ================ 图 1：BERT vs GPT vs ELMo 对比 ================ -->
+<div class="notebook" id="diagram1">
+  <div class="spiral-holes">
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div>
+  </div>
+  <div class="tape tape-left"></div>
+  <div class="tape tape-right"></div>
+
+  <div class="page-header">
+    <h2>图 1 · 架构对比：BERT vs GPT vs ELMo</h2>
+    <div class="subtitle">三大预训练模型核心差异一览</div>
+  </div>
+
+  <div class="term-list">
+    <span class="term-tag tag-blue">Transformer</span>
+    <span class="term-tag tag-green">双向编码器</span>
+    <span class="term-tag tag-orange">单向解码器</span>
+    <span class="term-tag tag-purple">RNN 语言模型</span>
+    <span class="term-tag tag-red">MLM 掩码预测</span>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">ARCHITECTURE COMPARISON</div>
+    <div class="mermaid">
+flowchart TD
+    subgraph ELMo["🦜 ELMo (2018)"]
+        direction TB
+        E1["Embedding<br/>词向量层"]
+        E2["BiLSTM Layer 1"]
+        E3["BiLSTM Layer 2"]
+        E4["加权融合<br/>多层表示"]
+        E1 --> E2 --> E3 --> E4
+    end
+
+    subgraph GPT ["🤖 GPT-1 (2018)"]
+        direction TB
+        G1["Embedding<br/>词+位置"]
+        G2["Transformer Decoder Block 1"]
+        G3["..."]
+        G4["Transformer Decoder Block N"]
+        G5["Linear Output<br/>词表预测"]
+        G1 --> G2 --> G3 --> G4 --> G5
+    end
+
+    subgraph BERT ["📚 BERT (2018)"]
+        direction TB
+        B1["Embedding<br/>词+位置+句子"]
+        B2["Transformer Encoder Block 1"]
+        B3["..."]
+        B4["Transformer Encoder Block N"]
+        B5["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 池化<br/>序列表示"]
+        B1 --> B2 --> B3 --> B4 --> B5
+    end
+
+    ELMo -->|"特征提取"| ELMo_OUT["动态特征向量"]
+    GPT -->|"生成"| GPT_OUT["自回归生成"]
+    BERT -->|"理解"| BERT_OUT["上下文表示"]
+
+    style ELMo fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
+    style GPT fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+    style BERT fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style ELMo_OUT fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    style GPT_OUT fill:#bbdefb,stroke:#1565c0,stroke-width:2px
+    style BERT_OUT fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style E1 fill:#f1f8e9,stroke:#689f38
+    style E2 fill:#dcedc8,stroke:#558b2f
+    style E3 fill:#dcedc8,stroke:#558b2f
+    style E4 fill:#c5e1a5,stroke:#33691e
+    style G1 fill:#e1f5fe,stroke:#0288d1
+    style G2 fill:#b3e5fc,stroke:#0277bd
+    style G3 fill:#b3e5fc,stroke:#0277bd
+    style G4 fill:#b3e5fc,stroke:#0277bd
+    style G5 fill:#81d4fa,stroke:#01579b
+    style B1 fill:#fff8e1,stroke:#f9a825
+    style B2 fill:#ffecb3,stroke:#ff8f00
+    style B3 fill:#ffecb3,stroke:#ff8f00
+    style B4 fill:#ffecb3,stroke:#ff8f00
+    style B5 fill:#ffe082,stroke:#ff6f00
+    </div>
+  </div>
+
+  <div class="diagram-container" style="margin-top: 30px;">
+    <div class="diagram-label green">DETAILED COMPARISON</div>
+    <div class="mermaid">
+flowchart LR
+    subgraph DIM["📏 对比维度"]
+        direction TB
+        D1["🔧 架构类型"]
+        D2["🎯 预训练方式"]
+        D3["🔄 上下文方向"]
+        D4["⚙️ 微调方式"]
+        D5["💡 适用场景"]
+    end
+
+    subgraph ELMO["🦜 ELMo"]
+        direction TB
+        A1["双向 BiLSTM"]
+        A2["语言模型<br/>(左→右 & 右→左 分开)"]
+        A3["双向但分离"]
+        A4["冻结编码器<br/>只训下游层"]
+        A5["NER / SRL<br/>情感分析"]
+    end
+
+    subgraph GPT_ONE["🤖 GPT-1"]
+        direction TB
+        C1["Transformer Decoder"]
+        C2["自回归语言模型<br/>(Next Token)"]
+        C3["单向 (左→右)"]
+        C4["拼接输出头<br/>全模型微调"]
+        C5["文本生成<br/>对话系统"]
+    end
+
+    subgraph BERT_MODEL ["📚 BERT"]
+        direction TB
+        F1["Transformer Encoder"]
+        F2["MLM + NSP<br/>(掩码预测+句对判断)"]
+        F3["真正双向"]
+        F4["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]>/Token 输出<br/>添加任务头"]
+        F5["分类 / QA<br/>句对任务"]
+    end
+
+    D1 --> A1
+    D2 --> A2
+    D3 --> A3
+    D4 --> A4
+    D5 --> A5
+
+    D1 --> C1
+    D2 --> C2
+    D3 --> C3
+    D4 --> C4
+    D5 --> C5
+
+    D1 --> F1
+    D2 --> F2
+    D3 --> F3
+    D4 --> F4
+    D5 --> F5
+
+    style DIM fill:#f5f5f5,stroke:#616161,stroke-width:3px
+    style D1 fill:#eeeeee,stroke:#424242
+    style D2 fill:#eeeeee,stroke:#424242
+    style D3 fill:#eeeeee,stroke:#424242
+    style D4 fill:#eeeeee,stroke:#424242
+    style D5 fill:#eeeeee,stroke:#424242
+    style ELMO fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style GPT_ONE fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style BERT_MODEL fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style A1 fill:#f1f8e9,stroke:#388e3c
+    style A2 fill:#f1f8e9,stroke:#388e3c
+    style A3 fill:#f1f8e9,stroke:#388e3c
+    style A4 fill:#f1f8e9,stroke:#388e3c
+    style A5 fill:#f1f8e9,stroke:#388e3c
+    style C1 fill:#e1f5fe,stroke:#1976d2
+    style C2 fill:#e1f5fe,stroke:#1976d2
+    style C3 fill:#e1f5fe,stroke:#1976d2
+    style C4 fill:#e1f5fe,stroke:#1976d2
+    style C5 fill:#e1f5fe,stroke:#1976d2
+    style F1 fill:#fff8e1,stroke:#f57c00
+    style F2 fill:#fff8e1,stroke:#f57c00
+    style F3 fill:#fff8e1,stroke:#f57c00
+    style F4 fill:#fff8e1,stroke:#f57c00
+    style F5 fill:#fff8e1,stroke:#f57c00
+    </div>
+  </div>
+
+  <div class="key-insight">
+    <strong>💡 核心洞察：</strong>
+    BERT 的革命性贡献在于首次实现<strong>真正的双向上下文理解</strong>，通过 MLM 任务让模型能够同时利用左右两侧的信息，而 GPT 只能看到左边（单向），ELMo 虽然双向但两个方向是分开编码的。这使得 BERT 在理解类任务（分类、QA）上全面超越同期模型。
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-color" style="background:#e8f5e9;"></div>ELMo 系列</div>
+    <div class="legend-item"><div class="legend-color" style="background:#e3f2fd;"></div>GPT 系列</div>
+    <div class="legend-item"><div class="legend-color" style="background:#fff3e0;"></div>BERT 系列</div>
+    <div class="legend-item"><div class="legend-color" style="background:#f5f5f5;"></div>对比维度</div>
+  </div>
+</div>
+
+<!-- ================ 图 2：MLM 训练过程 ================ -->
+<div class="notebook delay-2" id="diagram2">
+  <div class="spiral-holes">
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div>
+  </div>
+  <div class="tape tape-left"></div>
+  <div class="tape tape-right"></div>
+
+  <div class="page-header">
+    <h2>图 2 · MLM 训练过程</h2>
+    <div class="subtitle">Masked Language Model — 掩码语言模型训练流程</div>
+  </div>
+
+  <div class="term-list">
+    <span class="term-tag tag-red">[MASK] 标记</span>
+    <span class="term-tag tag-green">15% 随机掩码</span>
+    <span class="term-tag tag-blue">双向自注意力</span>
+    <span class="term-tag tag-orange">Cross-Entropy Loss</span>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-label orange">MLM TRAINING PIPELINE</div>
+    <div class="mermaid">
+flowchart LR
+    subgraph Input["① 输入序列"]
+        direction LR
+        A1(["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]>"]) --- A2(["我"]) --- A3(["喜欢"]) --- A4(["BERT"]) --- A5(["的"]) --- A6(["论文"]) --- A7(["[SEP]"])
+    end
+
+    subgraph Mask["② 随机掩码 15%"]
+        direction LR
+        B1(["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]>"]) --- B2(["我"]) --- B3(["[MASK]"]) --- B4(["BERT"]) --- B5(["[MASK]"]) --- B6(["论文"]) --- B7(["[SEP]"])
+    end
+
+    subgraph Encode["③ 双向 Transformer 编码"]
+        direction TB
+        C1["Self-Attention Layer"]
+        C2["前馈网络 FFN"]
+        C3["LayerNorm + Residual"]
+        C1 --> C2 --> C3
+    end
+
+    subgraph Predict["④ 预测被掩码词"]
+        direction LR
+        D1(["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]>"]) --- D2(["我"]) --- D3(["？"]) --- D4(["BERT"]) --- D5(["？"]) --- D6(["论文"]) --- D7(["[SEP]"])
+    end
+
+    subgraph Loss["⑤ 计算损失"]
+        direction TB
+        E1["预测词 vs 真实词"]
+        E2["Cross-Entropy Loss"]
+        E1 --> E2
+    end
+
+    Input -->|"随机选择"| Mask
+    Mask -->|"送入"| Encode
+    Encode -->|"输出"| Predict
+    Predict -->|"对比"| Loss
+
+    style Input fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    style Mask fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    style Encode fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style Predict fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style Loss fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style A3 fill:#ffecb3,stroke:#e65100,stroke-width:2px,stroke-dasharray:5 5
+    style A5 fill:#ffecb3,stroke:#e65100,stroke-width:2px,stroke-dasharray:5 5
+    style B3 fill:#ffccbc,stroke:#d84315,stroke-width:3px
+    style B5 fill:#ffccbc,stroke:#d84315,stroke-width:3px
+    style D3 fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    style D5 fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px
+    </div>
+  </div>
+
+  <div class="diagram-container" style="margin-top: 30px;">
+    <div class="diagram-label purple">MASKING STRATEGY (80-10-10)</div>
+    <div class="mermaid">
+flowchart TD
+    subgraph Original["原始 Token: 喜欢"]
+        direction LR
+        O1(["我"]) --- O2(["喜欢"]) --- O3(["BERT"])
+    end
+
+    subgraph MaskProcess["掩码处理策略"]
+        direction TB
+        M1["80% → 替换为 [MASK]<br/>我 [MASK] BERT"]
+        M2["10% → 随机替换<br/>我 跑步 BERT"]
+        M3["10% → 保持原样<br/>我 喜欢 BERT"]
+    end
+
+    Original -->|"随机选择"| MaskProcess
+
+    M1 --> P1["✅ 学习真正的语言理解"]
+    M2 --> P2["🛡️ 防止预测作弊"]
+    M3 --> P3["🔄 保持语言流畅性"]
+
+    style Original fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    style MaskProcess fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style M1 fill:#fff3e0,stroke:#ef6c00
+    style M2 fill:#e8eaf6,stroke:#3f51b5
+    style M3 fill:#f1f8e9,stroke:#689f38
+    style P1 fill:#ffe0b2,stroke:#ef6c00
+    style P2 fill:#c5cae9,stroke:#3f51b5
+    style P3 fill:#dcedc8,stroke:#689f38
+    </div>
+  </div>
+
+  <div class="key-insight">
+    <strong>💡 关键设计：</strong>
+    <strong>80-10-10 掩码策略</strong>确保模型不会过度依赖 [MASK] 标记的存在而"作弊"。在实际微调时，[MASK] 标记不会出现，这种设计让预训练和微调的分布差距最小化。BERT 只对被掩码的 15% Token 计算损失，其余 85% 的 Token 信息通过自注意力机制辅助预测。
+  </div>
+</div>
+
+<!-- ================ 图 3：NSP 训练过程 ================ -->
+<div class="notebook" id="diagram3">
+  <div class="spiral-holes">
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div>
+  </div>
+  <div class="tape tape-left"></div>
+  <div class="tape tape-right"></div>
+
+  <div class="page-header">
+    <h2>图 3 · NSP 训练过程</h2>
+    <div class="subtitle">Next Sentence Prediction — 下一句预测训练流程</div>
+  </div>
+
+  <div class="term-list">
+    <span class="term-tag tag-blue">句子对输入</span>
+    <span class="term-tag tag-green">50% 真实/50% 随机</span>
+    <span class="term-tag tag-orange"><[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 池化</span>
+    <span class="term-tag tag-red">二分类判断</span>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-label">NSP TRAINING PIPELINE</div>
+    <div class="mermaid">
+flowchart TD
+    subgraph SentencePair["① 构造句子对"]
+        direction TB
+        S1["句子 A: 机器学习模型需要大量数据"]
+        S2["句子 B: 深度网络在这方面表现出色"]
+        S3{"相邻吗？"}
+        S1 --> S3
+        S2 --> S3
+    end
+
+    subgraph Labeling["② 添加标签"]
+        direction TB
+        L1["✅ 50% 真实相邻<br/>IsNext = Yes"]
+        L2["❌ 50% 随机句子<br/>IsNext = No"]
+    end
+
+    subgraph Embed["③ 拼接编码"]
+        direction LR
+        E1(["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]>"]) --- E2(["Machine"]) --- E3(["learning"]) --- E4(["models"]) --- E5(["require"]) --- E6(["large"]) --- E7(["datasets"])
+        E7 --- E8(["[SEP]"])
+        E8 --- E9(["Deep"]) --- E10(["neural"]) --- E11(["networks"]) --- E12(["excel"]) --- E13(["here"]) --- E14(["[SEP]"])
+    end
+
+    subgraph Segment["④ 句子嵌入 Segment Embedding"]
+        direction TB
+        SE1["Sentence A → E<sub>A</sub> (0)"]
+        SE2["Sentence B → E<sub>B</sub> (1)"]
+        SE1 --> SE2
+    end
+
+    subgraph Output["⑤ <[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 输出 → 分类器"]
+        direction TB
+        O1["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 的隐藏状态"]
+        O2["Linear + Sigmoid"]
+        O3{"预测：是/否"}
+        O1 --> O2 --> O3
+    end
+
+    SentencePair --> Labeling
+    Labeling -->|"拼接"| Embed
+    Embed -->|"添加"| Segment
+    Segment -->|"编码后"| Output
+
+    style SentencePair fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    style Labeling fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style Embed fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Segment fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    style Output fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style S3 fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style L1 fill:#c8e6c9,stroke:#2e7d32
+    style L2 fill:#ffccbc,stroke:#d84315
+    style O3 fill:#ffeb3b,stroke:#f57f17,stroke-width:2px
+    </div>
+  </div>
+
+  <div class="diagram-container" style="margin-top: 30px;">
+    <div class="diagram-label orange">INPUT REPRESENTATION</div>
+    <div class="mermaid">
+flowchart LR
+    subgraph InputEmbed["输入表示 = 三种嵌入之和"]
+        direction TB
+        I1(["Token<br/>Embedding"])
+        I2(["Position<br/>Embedding"])
+        I3(["Segment<br/>Embedding"])
+        I1 --> SUM(["+"]); I2 --> SUM; I3 --> SUM
+    end
+
+    subgraph TokenEmb["Token Embedding<br/>(WordPiece, 30000 词表)"]
+        direction LR
+        T1(["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]>"]) --- T2(["机器学习"]) --- T3(["需要"]) --- T4(["大量"]) --- T5(["数据"])
+    end
+
+    subgraph PosEmb["Position Embedding<br/>(学习得到, 512 最大长度)"]
+        direction LR
+        P1(["POS 0"]) --- P2(["POS 1"]) --- P3(["POS 2"]) --- P4(["POS 3"]) --- P5(["POS 4"])
+    end
+
+    subgraph SegEmb["Segment Embedding<br/>(区分句子 A / B)"]
+        direction LR
+        SG1(["E<sub>A</sub>"]) --- SG2(["E<sub>A</sub>"]) --- SG3(["E<sub>A</sub>"]) --- SG4(["E<sub>A</sub>"]) --- SG5(["E<sub>A</sub>"])
+    end
+
+    InputEmbed --> InputSum["📊 BERT 输入序列"]
+    TokenEmb --> InputSum
+    PosEmb --> InputSum
+    SegEmb --> InputSum
+
+    style InputEmbed fill:#fff3e0,stroke:#e65100,stroke-width:3px
+    style InputSum fill:#ffe0b2,stroke:#ef6c00,stroke-width:3px
+    style TokenEmb fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    style PosEmb fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style SegEmb fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style SUM fill:#ffeb3b,stroke:#f57f17,stroke-width:3px
+    </div>
+  </div>
+
+  <div class="key-insight">
+    <strong>💡 NSP 的意义：</strong>
+    NSP 任务让 BERT 学习<strong>句子间的逻辑关系</strong>，这对 QA（问答）和 NLI（自然语言推理）等任务至关重要。通过判断句子 B 是否紧跟句子 A，模型学会了理解段落级别的语义连贯性，而不仅仅是单个句子的含义。BERT 预训练时从语料库中随机采样构造句子对。
+  </div>
+</div>
+
+<!-- ================ 图 4：微调流程 ================ -->
+<div class="notebook delay-2" id="diagram4">
+  <div class="spiral-holes">
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    <div class="hole"></div>
+  </div>
+  <div class="tape tape-left"></div>
+  <div class="tape tape-right"></div>
+
+  <div class="tape tape-left"></div>
+  <div class="tape tape-right"></div>
+
+  <div class="page-header">
+    <h2>图 4 · 微调适配流程</h2>
+    <div class="subtitle">Fine-tuning Pipeline — 预训练模型 → 下游任务</div>
+  </div>
+
+  <div class="term-list">
+    <span class="term-tag tag-blue">预训练权重</span>
+    <span class="term-tag tag-green">任务适配</span>
+    <span class="term-tag tag-orange">分类任务</span>
+    <span class="term-tag tag-purple">QA 任务</span>
+    <span class="term-tag tag-red">序列标注</span>
+  </div>
+
+  <div class="diagram-container">
+    <div class="diagram-label green">FINE-TUNING PIPELINE</div>
+    <div class="mermaid">
+flowchart TD
+    subgraph Pretrain["① BERT 预训练模型"]
+        direction TB
+        P1["BERT-base<br/>12 层, 1.1 亿参数"]
+        P2["或 BERT-large<br/>24 层, 3.4 亿参数"]
+        P1 --> P_PRE{"下载预训练权重"}
+        P2 --> P_PRE
+    end
+
+    subgraph AddLayer["② 添加任务输出层"]
+        direction TB
+        A1["<[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 隐藏状态<br/>(聚合全局信息)"]
+        A2["Linear + Softmax<br/>(分类器)"]
+        A1 --> A2
+    end
+
+    subgraph Tasks["③ 下游任务适配"]
+        direction LR
+        subgraph T1["📊 文本分类"]
+            direction TB
+            T1a["输入: 句子"]
+            T1b["取 <[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 输出"]
+            T1c["全连接 + Softmax"]
+            T1a --> T1b --> T1c
+        end
+
+        subgraph T2["❓ 问答 QA"]
+            direction TB
+            T2a["输入: 问题+文章"]
+            T2b["Token 级别输出"]
+            T2c["预测 start/end"]
+            T2a --> T2b --> T2c
+        end
+
+        subgraph T3["🏷️ 序列标注"]
+            direction TB
+            T3a["输入: 句子"]
+            T3b["Token 级别输出"]
+            T3c["每个 Token 分类"]
+            T3a --> T3b --> T3c
+        end
+
+        subgraph T4["🔗 句对关系"]
+            direction TB
+            T4a["输入: 句子 A + B"]
+            T4b["取 <[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 输出"]
+            T4c["蕴含/中立/矛盾"]
+            T4a --> T4b --> T4c
+        end
+    end
+
+    subgraph Train["④ 端到端微调"]
+        direction TB
+        TR1["加载预训练权重"]
+        TR2["小学习率调整<br/>AdamW"]
+        TR3["少量 Epoch<br/>(2-5)"]
+        TR1 --> TR2 --> TR3
+    end
+
+    Pretrain -->|"加载"| AddLayer
+    AddLayer -->|"适配"| Tasks
+    Tasks -->|"训练"| Train
+
+    style Pretrain fill:#e1f5fe,stroke:#0288d1,stroke-width:3px
+    style AddLayer fill:#fff9c4,stroke:#f9a825,stroke-width:3px
+    style Tasks fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px
+    style Train fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
+    style T1 fill:#fff3e0,stroke:#ef6c00
+    style T2 fill:#fce4ec,stroke:#c2185b
+    style T3 fill:#e8eaf6,stroke:#3f51b5
+    style T4 fill:#f1f8e9,stroke:#689f38
+    style T1c fill:#ffcc80,stroke:#e65100
+    style T2c fill:#f8bbd0,stroke:#ad1457
+    style T3c fill:#c5cae9,stroke:#283593
+    style T4c fill:#c5e1a5,stroke:#33691e
+    </div>
+  </div>
+
+  <div class="diagram-container" style="margin-top: 30px;">
+    <div class="diagram-label">KEY ADVANTAGES</div>
+    <div class="mermaid">
+mindmap
+  root((BERT 微调优势))
+    🚀 高效
+      预训练+微调范式
+      数据需求少
+      训练速度快
+    🎯 灵活
+      统一架构
+      无需大改模型
+      多种任务适配
+    🏆 性能
+      11 项 SOTA
+      平均提升 2-4%
+      奠定 NLP 新范式
+    🔧 可扩展
+      支持多语言
+      领域自适应
+      迁移到其他模态
+    📊 核心指标
+      GLUE 7 项第一
+      SQuAD v1.1 EM 80.5
+      SWAG 86.3% Accuracy
+    ⚡ 训练配置
+      Batch Size: 256
+      Seq Length: 512
+      Steps: 1M+
+    🧩 下游任务
+      分类 / 回归
+      抽取 / 匹配
+      生成 / 对话
+      搜索 / 排名
+    📚 核心任务
+      MNLI 蕴含推理
+      SQuAD 阅读理解
+      SWAG 常识推理
+      CoNLL-03 命名实体
+    📈 影响范围
+      NLP 全领域
+      多模态扩展
+      大模型基础
+      工业界应用
+    🔄 后续演进
+      RoBERTa
+      DistilBERT
+      ALBERT
+      BERT variants
+    🎨 架构创新
+      双向编码器
+      MLM + NSP 联合训练
+      <[BOS_never_used_51bce0c785ca2f68081bfa7d91973934]> 作为分类 Token
+      预训练+微调统一范式
+    🌍 实际应用
+      搜索引擎
+      智能客服
+      文本分析
+      知识图谱
+    💡 关键设计
+      80-10-10 掩码策略
+      动态掩码 (RoBERTa)
+      句子对预训练
+      位置编码可学习
+    🏗️ 模型规模
+      BERT-base: 110M
+      BERT-large: 340M
+      训练语料: 33亿词
+      训练步数: 1M
+    ⚙️ 技术细节
+      WordPiece 分词
+      512 最大序列长度
+      Adam 优化器
+      学习率: 2e-5
+    📊 对比实验
+      vs ELMo: +5.6%
+      vs GPT: +4.5%
+      vs SOTA: +2.9%
+      跨任务平均: +3.8%
+  </div>
+  </div>
+
+  <div class="key-insight">
+    <strong>💡 微调范式的革命性变化：</strong>
+    BERT 开创的"预训练+微调"范式彻底改变了 NLP 的研究方法。传统方法每个任务需要独立设计模型架构，而 BERT 只需在预训练模型上添加简单的输出头，就能在几乎所有下游任务上取得领先性能。这大大降低了 NLP 研究的门槛，推动了大模型时代的到来。
+  </div>
+
+  <div class="footer-note">
+    📘 BERT 论文精读 · 概念图 · Generated from video transcript
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeVariables: {
+      primaryColor: '#e3f2fd',
+      primaryTextColor: '#2c2c2c',
+      primaryBorderColor: '#1565c0',
+      lineColor: '#546e7a',
+      fontFamily: "'Patrick Hand', cursive",
+      fontSize: '16px'
+    },
+    flowchart: {
+      htmlLabels: true,
+      curve: 'basis',
+      padding: 20,
+      nodeSpacing: 40,
+      rankSpacing: 50
+    },
+    mindmap: {
+      padding: 16,
+      maxNodeWidth: 200
+    }
+  });
+</script>
+
+</body>
+</html>
