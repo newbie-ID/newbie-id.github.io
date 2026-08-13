@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>skill-port · Skill 打包/还原工作流</title>
+<link href="https://fonts.googleapis.com/css2?family=Kalam:wght@300;400;700&family=Patrick+Hand&family=Zeyada&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/lucide-static@latest/font/lucide.min.css" rel="stylesheet">
+<style>
+  :root {
+    --paper-bg: #fdf6e3;
+    --paper-dark: #f5ecd3;
+    --paper-line: #e8e0cc;
+    --ink-black: #2c2c2c;
+    --ink-red: #c0392b;
+    --ink-blue: #2980b9;
+    --ink-green: #27ae60;
+    --ink-purple: #8e44ad;
+    --ink-orange: #e67e22;
+    --highlight-yellow: rgba(255, 235, 59, 0.35);
+    --highlight-pink: rgba(255, 105, 180, 0.25);
+    --highlight-green: rgba(46, 204, 113, 0.2);
+    --highlight-orange: rgba(255, 152, 0, 0.2);
+    --tape: rgba(255, 255, 255, 0.45);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #3d3d3d;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    font-family: 'Kalam', cursive;
+    overflow-x: hidden;
+  }
+
+  .desk {
+    position: relative;
+    width: 100%;
+    max-width: 920px;
+  }
+
+  .notebook {
+    position: relative;
+    background: var(--paper-bg);
+    background-image:
+      linear-gradient(90deg, transparent 79px, #e8d5b5 79px, #e8d5b5 81px, transparent 81px),
+      linear-gradient(var(--paper-line) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 2.4rem;
+    background-position: 0 0, 0 0;
+    border-radius: 4px;
+    box-shadow:
+      0 1px 2px rgba(0,0,0,0.15),
+      0 4px 8px rgba(0,0,0,0.12),
+      0 8px 16px rgba(0,0,0,0.1),
+      0 16px 32px rgba(0,0,0,0.08),
+      15px 25px 40px rgba(0,0,0,0.15);
+    padding: 3rem 2.5rem 3rem 6rem;
+    line-height: 2.4rem;
+    color: var(--ink-black);
+    transform: rotate(-0.3deg);
+    animation: paperFloat 6s ease-in-out infinite;
+  }
+
+  @keyframes paperFloat {
+    0%, 100% { transform: rotate(-0.3deg) translateY(0); }
+    50% { transform: rotate(-0.1deg) translateY(-3px); }
+  }
+
+  /* ===== 螺旋装订 ===== */
+  .spiral-holes {
+    position: absolute;
+    left: 20px;
+    top: 0;
+    bottom: 0;
+    width: 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    padding: 2rem 0;
+  }
+
+  .hole {
+    width: 14px;
+    height: 14px;
+    background: #3d3d3d;
+    border-radius: 50%;
+    box-shadow: inset 1px 1px 2px rgba(0,0,0,0.5);
+    position: relative;
+  }
+
+  .hole::after {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 6px;
+    background: linear-gradient(180deg, #888 0%, #bbb 50%, #888 100%);
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+
+  /* ===== 装饰元素 ===== */
+  .tape {
+    position: absolute;
+    width: 120px;
+    height: 35px;
+    background: var(--tape);
+    opacity: 0.6;
+    transform: rotate(-3deg);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    backdrop-filter: blur(1px);
+  }
+
+  .tape.top-left {
+    top: -12px;
+    left: 40px;
+    transform: rotate(-4deg);
+  }
+
+  .tape.top-right {
+    top: -10px;
+    right: 60px;
+    transform: rotate(3deg);
+    width: 100px;
+  }
+
+  .paperclip {
+    position: absolute;
+    top: 40px;
+    right: 30px;
+    width: 30px;
+    height: 70px;
+    border: 3px solid #b0b0b0;
+    border-radius: 0 0 15px 15px;
+    border-top: none;
+    transform: rotate(-5deg);
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.15);
+    z-index: 10;
+  }
+
+  .paperclip::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 6px;
+    width: 12px;
+    height: 25px;
+    border: 3px solid #b0b0b0;
+    border-bottom: none;
+    border-radius: 15px 15px 0 0;
+  }
+
+  .coffee-stain {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 3px solid rgba(139, 90, 43, 0.12);
+    box-shadow:
+      0 0 0 8px rgba(139, 90, 43, 0.06),
+      0 0 0 16px rgba(139, 90, 43, 0.03);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .coffee-stain.one { bottom: 60px; right: 40px; }
+
+  .folded-corner {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, transparent 50%, var(--paper-dark) 50%);
+    border-bottom-right-radius: 4px;
+    box-shadow: -2px -2px 4px rgba(0,0,0,0.08);
+  }
+
+  .doodle {
+    position: absolute;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  /* ===== 标题系统 ===== */
+  .title {
+    font-family: 'Zeyada', cursive;
+    font-size: 3.2rem;
+    font-weight: 700;
+    color: var(--ink-black);
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
+    position: relative;
+    display: inline-block;
+  }
+
+  .title-underline {
+    position: absolute;
+    bottom: 2px;
+    left: -5px;
+    right: -10px;
+    height: 8px;
+    background: var(--highlight-yellow);
+    z-index: -1;
+    border-radius: 4px;
+    transform: rotate(-1deg);
+  }
+
+  .subtitle {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 1.3rem;
+    color: var(--ink-blue);
+    margin-bottom: 1.5rem;
+    transform: rotate(-0.5deg);
+  }
+
+  /* ===== 段落系统 ===== */
+  .section {
+    margin-bottom: 2rem;
+    position: relative;
+  }
+
+  .section-title {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--ink-red);
+    margin-bottom: 0.5rem;
+    display: inline-block;
+    position: relative;
+  }
+
+  .section-title .marker-underline {
+    position: absolute;
+    bottom: 0;
+    left: -3px;
+    right: -5px;
+    height: 4px;
+    background: var(--ink-red);
+    opacity: 0.3;
+    border-radius: 2px;
+  }
+
+  .content {
+    font-size: 1.15rem;
+    text-align: justify;
+    position: relative;
+  }
+
+  /* ===== 文字高亮 ===== */
+  .highlight { background: var(--highlight-yellow); padding: 0 3px; border-radius: 2px; }
+  .highlight-green { background: var(--highlight-green); padding: 0 3px; border-radius: 2px; }
+
+  /* ===== 彩色文字 ===== */
+  .red-text { color: var(--ink-red); font-weight: 700; }
+  .blue-text { color: var(--ink-blue); }
+  .green-text { color: var(--ink-green); }
+  .purple-text { color: var(--ink-purple); }
+
+  /* ===== 代码术语 ===== */
+  .code-term {
+    font-family: 'Courier New', monospace;
+    font-size: 0.95em;
+    background: rgba(0,0,0,0.06);
+    padding: 0 4px;
+    border-radius: 3px;
+    border-bottom: 1.5px solid var(--ink-purple);
+  }
+
+  /* ===== 代码块 ===== */
+  .code-block {
+    display: block;
+    margin: 0.8rem 0;
+    padding: 0.8rem 1rem;
+    background: #2d2d2d;
+    color: #f8f8f2;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    box-shadow: 3px 3px 8px rgba(0,0,0,0.2);
+    transform: rotate(0.3deg);
+    position: relative;
+  }
+
+  .code-block::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 15px;
+    width: 50px;
+    height: 12px;
+    background: rgba(255,255,255,0.3);
+    border: 1px solid rgba(0,0,0,0.1);
+    transform: rotate(-2deg);
+  }
+
+  .code-comment { color: #75715e; }
+  .code-keyword { color: #66d9ef; }
+
+  /* ===== 流程图 ===== */
+  .flow-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0.8rem 0;
+    padding: 0.6rem 1rem;
+    background: rgba(255,255,255,0.4);
+    border: 2px dashed var(--ink-blue);
+    border-radius: 8px;
+    transform: rotate(0.5deg);
+  }
+
+  .flow-item {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    background: #fff;
+    border: 1.5px solid var(--ink-black);
+    border-radius: 6px;
+    font-size: 1rem;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+    position: relative;
+  }
+
+  .flow-arrow {
+    font-size: 1.3rem;
+    color: var(--ink-red);
+  }
+
+  /* ===== 对比框 ===== */
+  .compare-box {
+    margin: 1rem 0;
+    padding: 1rem 1.2rem;
+    background: linear-gradient(135deg, rgba(41,128,185,0.08) 0%, rgba(52,152,219,0.05) 100%);
+    border-left: 4px solid var(--ink-blue);
+    border-radius: 0 8px 8px 0;
+    transform: rotate(-0.2deg);
+  }
+
+  .compare-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8rem;
+    margin-bottom: 0.8rem;
+    font-size: 1.1rem;
+  }
+
+  .compare-row:last-child { margin-bottom: 0; }
+
+  .compare-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 70px;
+    height: 28px;
+    background: var(--ink-blue);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .compare-label.old { background: var(--ink-purple); }
+  .compare-label.new { background: var(--ink-red); }
+
+  /* ===== 入场动画 ===== */
+  .write-in {
+    opacity: 0;
+    transform: translateY(8px);
+    animation: writeIn 0.6s ease forwards;
+  }
+
+  @keyframes writeIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ===== 响应式 ===== */
+  @media (max-width: 768px) {
+    .notebook {
+      padding: 2rem 1.5rem 2rem 4rem;
+      background-position: 0 0, 0 0;
+      background-image:
+        linear-gradient(90deg, transparent 59px, #e8d5b5 59px, #e8d5b5 61px, transparent 61px),
+        linear-gradient(var(--paper-line) 1px, transparent 1px);
+    }
+    .title { font-size: 2.2rem; }
+    .content { font-size: 1rem; }
+    .spiral-holes { left: 12px; width: 40px; }
+    .hole { width: 10px; height: 10px; }
+    .hole::after { width: 22px; height: 5px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="desk">
+  <div class="notebook">
+    <!-- 螺旋装订孔 -->
+    <div class="spiral-holes">
+      <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+      <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+      <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+      <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+      <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+      <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+      <div class="hole"></div><div class="hole"></div><div class="hole"></div>
+    </div>
+
+    <!-- 装饰元素 -->
+    <div class="tape top-left"></div>
+    <div class="tape top-right"></div>
+    <div class="paperclip"></div>
+    <div class="coffee-stain one"></div>
+    <div class="folded-corner"></div>
+    <!-- Lucide 图标涂鸦（禁止 emoji） -->
+    <div class="doodle" style="top:64px;right:72px;font-size:2.6rem;transform:rotate(12deg);opacity:0.14;"><i class="lucide-package"></i></div>
+
+    <!-- ===== 标题 ===== -->
+    <div class="title write-in" style="animation-delay:0.1s">
+      skill-port
+      <div class="title-underline"></div>
+    </div>
+    <div class="subtitle write-in" style="animation-delay:0.3s">
+      把 Agent Skill 打包成可移植目录包 · 跨机器 / 跨 harness 还原
+    </div>
+
+    <!-- ===== 定位 ===== -->
+    <div class="section">
+      <div class="section-title write-in" style="animation-delay:0.5s">
+        它只做三件事
+        <div class="marker-underline"></div>
+      </div>
+      <div class="content write-in" style="animation-delay:0.6s">
+        2025–26 年 skill 已收敛成开放标准（<span class="code-term">SKILL.md</span> + <span class="code-term">.agents/skills/</span>），所以 skill-port <span class="red-text">不做格式翻译</span>，只做：<span class="highlight">打包</span> / <span class="highlight">跨机还原</span> / <span class="highlight">依赖重装</span>。
+      </div>
+    </div>
+
+    <!-- ===== pack 流程图 ===== -->
+    <div class="section">
+      <div class="section-title write-in" style="animation-delay:0.8s">
+        Phase 1 · pack（打包 / 备份 / 迁出）
+        <div class="marker-underline"></div>
+      </div>
+      <div class="flow-box write-in" style="animation-delay:0.9s">
+        <span class="flow-item">扫描已装 skill</span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item">解析 SKILL.md</span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item">复制 payload<br><span style="font-size:0.78rem;color:#888">排除运行态</span></span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item">识别依赖 &amp; 工具面</span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item" style="border-color:var(--ink-green);color:var(--ink-green);font-weight:700">产出 .skill/ 包</span>
+      </div>
+    </div>
+
+    <!-- ===== restore 流程图 ===== -->
+    <div class="section">
+      <div class="section-title write-in" style="animation-delay:1.1s">
+        Phase 2 · restore（还原 / 安装 / 迁入）
+        <div class="marker-underline"></div>
+      </div>
+      <div class="flow-box write-in" style="animation-delay:1.2s">
+        <span class="flow-item">读包</span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item" style="border-color:var(--ink-red);color:var(--ink-red);font-weight:700">工具面硬拦<br><span style="font-size:0.78rem;color:#999;font-weight:400">缺能力即中止</span></span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item">同名冲突询问</span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item">按目录映射复制</span>
+        <span class="flow-arrow">&#10142;</span>
+        <span class="flow-item">依赖核查 + 提示重装</span>
+      </div>
+    </div>
+
+    <!-- ===== 三个关键决策 ===== -->
+    <div class="section">
+      <div class="section-title write-in" style="animation-delay:1.4s">
+        三个关键决策
+        <div class="marker-underline"></div>
+      </div>
+      <div class="compare-box write-in" style="animation-delay:1.5s">
+        <div class="compare-row">
+          <span class="compare-label">两张表</span>
+          <span><span class="code-term">HARNESSES</span>（发现目录）+ <span class="code-term">CAPABILITIES</span>（工具面能力）= 全部适配。加新 harness 只改 <span class="code-term">adapters.py</span> 一行。</span>
+        </div>
+        <div class="compare-row">
+          <span class="compare-label old">依赖不内联</span>
+          <span>二进制 / 下游 skill / MCP 只<span class="red-text">声明</span>进 manifest，目标机由 <span class="code-term">setup.sh</span> 重装。运行态（bin/models/library）整个排除 → <span class="highlight-green">5.5 GB → 71.8 KB</span>。</span>
+        </div>
+        <div class="compare-row">
+          <span class="compare-label new">硬拦 ≠ 静默</span>
+          <span>工具面不匹配<span class="red-text">立即中止交人 review</span>；同名冲突<span class="red-text">询问</span>；默认<span class="red-text">不自动跑</span> setup。</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== 包结构 ===== -->
+    <div class="section">
+      <div class="section-title write-in" style="animation-delay:1.7s">
+        包结构
+        <div class="marker-underline"></div>
+      </div>
+      <div class="code-block write-in" style="animation-delay:1.8s">
+        <span class="code-comment"># &lt;name&gt;.skill/ = 唯一真相源 + 标准 skill 形态</span><br>
+        <span class="code-keyword">manifest.json</span>&nbsp;&nbsp;&nbsp;<span class="code-comment"># 元信息 / 来源 / 依赖 / 工具面 / provisioning</span><br>
+        <span class="code-keyword">payload/</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="code-comment"># SKILL.md + scripts + references,原样内联</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.animationPlayState = 'running';
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.write-in').forEach(el => {
+      el.style.animationPlayState = 'paused';
+      observer.observe(el);
+    });
+
+    setTimeout(() => {
+      document.querySelectorAll('.write-in').forEach(el => {
+        el.style.animationPlayState = 'running';
+      });
+    }, 100);
+  });
+</script>
+
+</body>
+</html>
