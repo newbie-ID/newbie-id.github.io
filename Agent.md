@@ -111,3 +111,30 @@ curl -s -o /dev/null -w "%{http_code}\n" "https://newbie-id.github.io/posts/<slu
 - 慢 GitHub 区域：博客推荐的镜像 `https://gh-proxy.com/` 可代理 release / raw 文件下载。
 - `git push` 鉴权：本项目用 `gh repo clone` 拉取，`gh` 的 credential helper 已配好，直接 `git push` 即可。
 - 梯子常代理 HTTP 而不代理 git 协议——所以 `git submodule` / `git clone` 可能仍卡，而 `gh` API / curl / 浏览器走 HTTPS 一般没问题。
+
+---
+
+## 7. ⚠️ 多机器提交：动仓库前先对齐远端（2026-08-21 实战）
+
+**背景**：某些机器上 `git push`（github.com:443 直连）会超时失败，此时只能走 **GitHub API** 提交（blob → tree → commit → `PATCH git/refs/heads/main`）。API 建出来的 commit 和本地 `git commit` 的 **SHA 不同**（内容可以完全一样），且 API 提交后本地 repo 不会自动知道。
+
+**后果**：如果机器 A 走 API 推了文章，机器 B（或另一台机器的 agent）本地还停在旧 HEAD，直接 `git commit` + `git push` 会产生分叉/覆盖冲突。
+
+**规矩：任何机器在这仓库提交前，先确认本地 HEAD 与远端一致：**
+
+```bash
+# api.github.com 通常可达（github.com 443 可能不通）
+gh api repos/newbie-ID/newbie-id.github.io/git/ref/heads/main --jq '.object.sha'
+git rev-parse HEAD          # 两者不一致 → 先同步再动手
+```
+
+**同步方法（github.com 直连不通时）**：`git fetch origin` 会卡死；用 API 把远端 commit 摘下来对齐，或干脆把本地分支指到远端 SHA 重做提交。
+
+**判断当前该走哪条路：**
+
+| 症状 | 通道 |
+|---|---|
+| `git push` 正常返回 | 直连 push，最省事 |
+| `git push` 卡住 / exit 124 | 走 `gh api`：blob → trees（逐级 base_tree 叠加）→ commit → PATCH ref。注意 `-F "tree[][mode]=100644"` 会把 mode 转成数字导致 422，**mode 必须用 `--input` JSON 传字符串** |
+
+**API 提交后**：`gh run list --workflow=gh-pages.yml --limit 1` 等 CI 变绿 → curl 线上 URL 验证 200（§5 全流程照走）。
