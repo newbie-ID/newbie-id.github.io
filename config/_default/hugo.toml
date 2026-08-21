@@ -2,6 +2,10 @@ theme = "blowfish"
 baseURL = "https://newbie-id.github.io/"
 defaultContentLanguage = "zh-cn"
 
+# 中文站必须开启：否则 Hugo 按空格分词，整段中文算 1 个词，
+# 字数统计和阅读时间会严重偏小（如 2792 字显示 566 字）
+hasCJKLanguage = true
+
 enableRobotsTXT = true
 summaryLength = 30
 
