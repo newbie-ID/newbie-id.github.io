@@ -1,6 +1,6 @@
 ---
 title: "【AI 实验】一局 99.8 的解剖：LLM 在 Balatro 里是怎么学会赢的"
-date: 2026-08-22T12:30:00+08:00
+date: 2026-08-22T11:10:00+08:00
 draft: false
 tags:
   - LLM
